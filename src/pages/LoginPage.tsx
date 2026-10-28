@@ -79,21 +79,21 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4 selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-surface-2 flex flex-col justify-center items-center p-4 selection:bg-brand/30">
       <div className="w-full max-w-md">
         {/* Brand Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-400 shadow-xl shadow-indigo-500/25 mb-3">
-            <Store className="w-7 h-7 text-white" />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 to-emerald-400 shadow-xl shadow-emerald-500/25 mb-3">
+            <Store className="w-7 h-7 text-fg" />
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Bill Pro</h1>
-          <p className="text-sm text-slate-400 mt-1">Retail Billing, Stock & GST System</p>
+          <h1 className="text-2xl font-bold text-fg tracking-tight">Bill Pro</h1>
+          <p className="text-sm text-fg-subtle mt-1">Retail Billing, Stock & GST System</p>
         </div>
 
         {/* Login Card */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-8 backdrop-blur-xl">
+        <div className="bg-surface border border-border rounded-2xl shadow-2xl p-6 sm:p-8 backdrop-blur-xl">
           {/* Tab Selector */}
-          <div className="flex bg-slate-950/80 p-1 rounded-xl mb-6 border border-slate-800">
+          <div className="flex bg-surface-2 p-1 rounded-xl mb-6 border border-border">
             <button
               type="button"
               onClick={() => {
@@ -102,8 +102,8 @@ export default function LoginPage() {
               }}
               className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
                 activeTab === 'password'
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'text-fg-subtle hover:text-fg'
               }`}
             >
               Password Login
@@ -116,8 +116,8 @@ export default function LoginPage() {
               }}
               className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
                 activeTab === 'pin'
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'text-fg-subtle hover:text-fg'
               }`}
             >
               <KeyRound className="w-3.5 h-3.5" />
@@ -126,7 +126,7 @@ export default function LoginPage() {
           </div>
 
           {errorMessage && (
-            <div className="mb-5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+            <div className="mb-5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
               {errorMessage}
             </div>
@@ -162,7 +162,7 @@ export default function LoginPage() {
           ) : (
             <form onSubmit={handlePinLogin} className="space-y-4">
               <div className="text-center mb-2">
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-fg-subtle">
                   Enter your cashier shift PIN for fast point-of-sale counter access
                 </p>
               </div>
@@ -175,7 +175,7 @@ export default function LoginPage() {
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
                   placeholder="••••"
-                  className="w-44 text-center tracking-[0.5em] text-2xl font-mono py-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-44 text-center tracking-[0.5em] text-2xl font-mono py-3 bg-surface-2 border border-border rounded-xl text-fg focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
 
@@ -186,43 +186,43 @@ export default function LoginPage() {
           )}
 
           {/* Demo Credentials Quick Switcher */}
-          <div className="mt-6 pt-5 border-t border-slate-800/80">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-2 text-center">
+          <div className="mt-6 pt-5 border-t border-border">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-subtle block mb-2 text-center">
               Quick Demo Fill
             </span>
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => handleQuickFill('owner')}
-                className="py-1.5 px-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg text-[11px] text-slate-300 transition-colors text-center"
+                className="py-1.5 px-2 bg-surface-2 hover:bg-surface-2 border border-border rounded-lg text-[11px] text-fg-muted transition-colors text-center"
               >
                 Owner
-                <span className="block text-[9px] text-slate-500 font-mono">PIN: 1234</span>
+                <span className="block text-[9px] text-fg-subtle font-mono">PIN: 1234</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickFill('manager')}
-                className="py-1.5 px-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg text-[11px] text-slate-300 transition-colors text-center"
+                className="py-1.5 px-2 bg-surface-2 hover:bg-surface-2 border border-border rounded-lg text-[11px] text-fg-muted transition-colors text-center"
               >
                 Manager
-                <span className="block text-[9px] text-slate-500 font-mono">PIN: 2345</span>
+                <span className="block text-[9px] text-fg-subtle font-mono">PIN: 2345</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickFill('cashier')}
-                className="py-1.5 px-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg text-[11px] text-slate-300 transition-colors text-center"
+                className="py-1.5 px-2 bg-surface-2 hover:bg-surface-2 border border-border rounded-lg text-[11px] text-fg-muted transition-colors text-center"
               >
                 Cashier
-                <span className="block text-[9px] text-slate-500 font-mono">PIN: 3456</span>
+                <span className="block text-[9px] text-fg-subtle font-mono">PIN: 3456</span>
               </button>
             </div>
           </div>
         </div>
 
         {/* Footer Signup Link */}
-        <p className="text-center text-xs text-slate-500 mt-6">
+        <p className="text-center text-xs text-fg-subtle mt-6">
           Setting up a new shop?{' '}
-          <Link to="/signup" className="text-indigo-400 hover:text-indigo-300 font-medium">
+          <Link to="/signup" className="text-brand hover:text-brand font-medium">
             Register Business
           </Link>
         </p>

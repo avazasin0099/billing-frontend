@@ -73,11 +73,11 @@ export default function CustomersPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col h-full min-h-0 gap-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">Customers & Udhaar Ledger</h2>
-            <p className="text-xs text-slate-400 mt-1">Manage accounts receivable, credit limits, and ledger statements</p>
+            <h2 className="text-xl font-bold text-fg tracking-tight">Customers & Udhaar Ledger</h2>
+            <p className="text-xs text-fg-subtle mt-1">Manage accounts receivable, credit limits, and ledger statements</p>
           </div>
           <Button variant="primary" onClick={() => setIsAddModalOpen(true)}>
             <Plus className="w-4 h-4 mr-1.5" />
@@ -85,7 +85,7 @@ export default function CustomersPage() {
           </Button>
         </div>
 
-        <Card>
+        <Card className="shrink-0">
           <div className="flex gap-3">
             <div className="flex-1">
               <Input
@@ -100,9 +100,9 @@ export default function CustomersPage() {
           </div>
         </Card>
 
-        <Card>
+        <div className="flex-1 min-h-0">
           {customers.length === 0 ? (
-            <div className="text-center py-12 text-slate-500 text-sm">No customers registered yet.</div>
+            <Card className="h-full flex items-center justify-center text-fg-subtle text-sm">No customers registered yet.</Card>
           ) : (
             <Table>
               <Thead>
@@ -118,14 +118,14 @@ export default function CustomersPage() {
               <Tbody>
                 {customers.map((c) => (
                   <Tr key={c.id}>
-                    <Td className="font-semibold text-white">{c.name}</Td>
+                    <Td className="font-semibold text-fg">{c.name}</Td>
                     <Td>{c.phone || '-'}</Td>
                     <Td className="font-mono text-xs">{c.gstin || '-'}</Td>
                     <Td>{formatCurrency(c.creditLimit)}</Td>
                     <Td>
                       <span
                         className={`font-bold ${
-                          Number(c.currentBalance) > 0 ? 'text-amber-400' : 'text-emerald-400'
+                          Number(c.currentBalance) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
                         }`}
                       >
                         {formatCurrency(c.currentBalance)}
@@ -142,7 +142,7 @@ export default function CustomersPage() {
               </Tbody>
             </Table>
           )}
-        </Card>
+        </div>
       </div>
 
       {/* Add Customer Modal */}
@@ -167,14 +167,14 @@ export default function CustomersPage() {
       {/* Ledger Statement Modal */}
       <Modal isOpen={isLedgerModalOpen} onClose={() => setIsLedgerModalOpen(false)} title={`Statement of Account — ${selectedCustomer?.name}`} maxWidth="lg">
         <div className="space-y-4">
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
+          <div className="bg-surface-2 p-4 rounded-xl border border-border flex justify-between items-center">
             <div>
-              <span className="text-xs text-slate-500 block">Current Outstanding Balance:</span>
-              <span className={`text-xl font-bold ${Number(selectedCustomer?.currentBalance) > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+              <span className="text-xs text-fg-subtle block">Current Outstanding Balance:</span>
+              <span className={`text-xl font-bold ${Number(selectedCustomer?.currentBalance) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                 {formatCurrency(selectedCustomer?.currentBalance)}
               </span>
             </div>
-            <div className="text-right text-xs text-slate-400">
+            <div className="text-right text-xs text-fg-subtle">
               <div>Phone: {selectedCustomer?.phone || '-'}</div>
               <div>GSTIN: {selectedCustomer?.gstin || 'None'}</div>
             </div>
@@ -193,16 +193,16 @@ export default function CustomersPage() {
             <Tbody>
               {customerLedger.length === 0 ? (
                 <Tr>
-                  <Td colSpan={5} className="text-center py-6 text-slate-500">No ledger transactions posted yet.</Td>
+                  <Td colSpan={5} className="text-center py-6 text-fg-subtle">No ledger transactions posted yet.</Td>
                 </Tr>
               ) : (
                 customerLedger.map((row) => (
                   <Tr key={row.id}>
                     <Td className="text-xs">{formatDate(row.createdAt)}</Td>
                     <Td className="text-xs font-mono">{row.entryType}</Td>
-                    <Td className="text-amber-400">{Number(row.debitAmount) > 0 ? formatCurrency(row.debitAmount) : '-'}</Td>
-                    <Td className="text-emerald-400">{Number(row.creditAmount) > 0 ? formatCurrency(row.creditAmount) : '-'}</Td>
-                    <Td className="text-right font-bold text-white">{formatCurrency(row.runningBalance)}</Td>
+                    <Td className="text-amber-600 dark:text-amber-400">{Number(row.debitAmount) > 0 ? formatCurrency(row.debitAmount) : '-'}</Td>
+                    <Td className="text-emerald-600 dark:text-emerald-400">{Number(row.creditAmount) > 0 ? formatCurrency(row.creditAmount) : '-'}</Td>
+                    <Td className="text-right font-bold text-fg">{formatCurrency(row.runningBalance)}</Td>
                   </Tr>
                 ))
               )}

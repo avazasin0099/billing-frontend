@@ -79,17 +79,17 @@ export default function InvoicesPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="flex flex-col h-full min-h-0 gap-6">
         {/* Header Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">Sales Invoices</h2>
-            <p className="text-xs text-slate-400 mt-1">Audit log of all counter and tax invoices</p>
+            <h2 className="text-xl font-bold text-fg tracking-tight">Sales Invoices</h2>
+            <p className="text-xs text-fg-subtle mt-1">Audit log of all counter and tax invoices</p>
           </div>
         </div>
 
         {/* Filters Card */}
-        <Card>
+        <Card className="shrink-0">
           <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-12 gap-3">
             <div className="sm:col-span-8">
               <Input
@@ -103,7 +103,7 @@ export default function InvoicesPage() {
               <select
                 value={paymentStatus}
                 onChange={(e) => setPaymentStatus(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="">All Payment Statuses</option>
                 <option value="PAID">Paid</option>
@@ -120,9 +120,11 @@ export default function InvoicesPage() {
         </Card>
 
         {/* Invoices Table */}
-        <Card>
-          {invoices.length === 0 ? (
-            <div className="text-center py-12 text-slate-500 text-sm">No invoices match your filter criteria.</div>
+        <div className="flex-1 min-h-0">
+          {isLoading ? (
+            <Card className="h-full flex items-center justify-center text-fg-subtle text-sm">Loading invoices…</Card>
+          ) : invoices.length === 0 ? (
+            <Card className="h-full flex items-center justify-center text-fg-subtle text-sm">No invoices match your filter criteria.</Card>
           ) : (
             <Table>
               <Thead>
@@ -140,12 +142,12 @@ export default function InvoicesPage() {
               <Tbody>
                 {invoices.map((inv) => (
                   <Tr key={inv.id}>
-                    <Td className="font-mono font-bold text-white">{inv.invoiceNumber}</Td>
+                    <Td className="font-mono font-bold text-fg">{inv.invoiceNumber}</Td>
                     <Td>{formatDate(inv.invoiceDate)}</Td>
                     <Td>{inv.customer?.name || 'Walk-in Retail'}</Td>
                     <Td>{formatCurrency(inv.taxableAmount)}</Td>
                     <Td>{formatCurrency(Number(inv.cgstAmount) + Number(inv.sgstAmount) + Number(inv.igstAmount))}</Td>
-                    <Td className="font-bold text-white">{formatCurrency(inv.totalAmount)}</Td>
+                    <Td className="font-bold text-fg">{formatCurrency(inv.totalAmount)}</Td>
                     <Td>
                       <Badge
                         variant={
@@ -176,7 +178,7 @@ export default function InvoicesPage() {
                         size="sm"
                         onClick={() => handleOpenReturnModal(inv)}
                         title="Process Return / Credit Note"
-                        className="hover:text-amber-400"
+                        className="hover:text-amber-600 dark:hover:text-amber-400"
                       >
                         <RotateCcw className="w-4 h-4" />
                       </Button>
@@ -186,7 +188,7 @@ export default function InvoicesPage() {
               </Tbody>
             </Table>
           )}
-        </Card>
+        </div>
       </div>
 
       {/* Invoice Detail Modal */}
@@ -197,13 +199,13 @@ export default function InvoicesPage() {
         maxWidth="lg"
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-2 text-xs text-slate-300 bg-slate-950 p-3 rounded-xl border border-slate-800">
+          <div className="grid grid-cols-2 text-xs text-fg-muted bg-surface-2 p-3 rounded-xl border border-border">
             <div>
-              <span className="text-slate-500 block">Customer</span>
-              <span className="font-semibold text-white">{selectedInvoice?.customer?.name || 'Walk-in Retail'}</span>
+              <span className="text-fg-subtle block">Customer</span>
+              <span className="font-semibold text-fg">{selectedInvoice?.customer?.name || 'Walk-in Retail'}</span>
             </div>
             <div className="text-right">
-              <span className="text-slate-500 block">Date</span>
+              <span className="text-fg-subtle block">Date</span>
               <span>{formatDate(selectedInvoice?.invoiceDate)}</span>
             </div>
           </div>
@@ -221,19 +223,19 @@ export default function InvoicesPage() {
             <Tbody>
               {selectedInvoice?.lines?.map((line) => (
                 <Tr key={line.id}>
-                  <Td className="font-medium text-white">{line.itemName}</Td>
+                  <Td className="font-medium text-fg">{line.itemName}</Td>
                   <Td>{line.quantity}</Td>
                   <Td>{formatCurrency(line.unitPrice)}</Td>
                   <Td>{line.gstRate}%</Td>
-                  <Td className="text-right font-bold text-white">{formatCurrency(line.lineTotal)}</Td>
+                  <Td className="text-right font-bold text-fg">{formatCurrency(line.lineTotal)}</Td>
                 </Tr>
               ))}
             </Tbody>
           </Table>
 
-          <div className="flex justify-between items-center pt-3 border-t border-slate-800 font-bold text-sm">
+          <div className="flex justify-between items-center pt-3 border-t border-border font-bold text-sm">
             <span>Bill Total:</span>
-            <span className="text-indigo-400 text-base">{formatCurrency(selectedInvoice?.totalAmount)}</span>
+            <span className="text-brand text-base">{formatCurrency(selectedInvoice?.totalAmount)}</span>
           </div>
         </div>
       </Modal>
@@ -246,19 +248,19 @@ export default function InvoicesPage() {
         maxWidth="md"
       >
         <div className="space-y-4">
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-fg-subtle">
             Select the items and quantities returned. Goods will be restocked automatically.
           </p>
 
           <div className="space-y-2">
             {selectedInvoice?.lines?.map((line) => (
-              <div key={line.id} className="flex items-center justify-between p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-xs">
+              <div key={line.id} className="flex items-center justify-between p-2.5 bg-surface-2 rounded-xl border border-border text-xs">
                 <div>
-                  <div className="font-semibold text-white">{line.itemName}</div>
-                  <div className="text-slate-500">Bought: {line.quantity} • {formatCurrency(line.unitPrice)}/ea</div>
+                  <div className="font-semibold text-fg">{line.itemName}</div>
+                  <div className="text-fg-subtle">Bought: {line.quantity} • {formatCurrency(line.unitPrice)}/ea</div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-400">Return:</span>
+                  <span className="text-fg-subtle">Return:</span>
                   <input
                     type="number"
                     min={0}
@@ -267,7 +269,7 @@ export default function InvoicesPage() {
                     onChange={(e) =>
                       setReturnQty({ ...returnQty, [line.itemId]: Math.min(line.quantity, Number(e.target.value)) })
                     }
-                    className="w-16 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white text-center font-bold"
+                    className="w-16 bg-surface border border-border rounded px-2 py-1 text-fg text-center font-bold"
                   />
                 </div>
               </div>
@@ -275,11 +277,11 @@ export default function InvoicesPage() {
           </div>
 
           <div>
-            <label className="text-xs font-medium text-slate-300 block mb-1">Refund Settlement Mode</label>
+            <label className="text-xs font-medium text-fg-muted block mb-1">Refund Settlement Mode</label>
             <select
               value={returnMode}
               onChange={(e) => setReturnMode(e.target.value as any)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-fg"
             >
               <option value="CASH">Cash Drawer Refund</option>
               <option value="LEDGER_CREDIT">Customer Account Credit (Udhaar deduction)</option>

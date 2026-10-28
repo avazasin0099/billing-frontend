@@ -34,18 +34,18 @@ export const Modal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-150">
       <div
         className={cn(
-          'w-full bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]',
+          'w-full bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]',
           maxWidths[maxWidth]
         )}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-          <h3 className="text-base font-semibold text-white tracking-tight">{title}</h3>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h3 className="text-base font-semibold text-fg tracking-tight">{title}</h3>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+            className="text-fg-subtle hover:text-fg p-1 rounded-lg hover:bg-surface-2 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -61,8 +61,8 @@ export const Table: React.FC<React.TableHTMLAttributes<HTMLTableElement>> = ({
   className,
   ...props
 }) => (
-  <div className="w-full overflow-x-auto rounded-xl border border-slate-800">
-    <table className={cn('w-full text-left text-sm text-slate-300', className)} {...props}>
+  <div className="w-full h-full overflow-auto rounded-xl border border-border bg-surface">
+    <table className={cn('w-full text-left text-sm text-fg-muted tabular-nums', className)} {...props}>
       {children}
     </table>
   </div>
@@ -73,7 +73,7 @@ export const Thead: React.FC<React.HTMLAttributes<HTMLTableSectionElement>> = ({
   className,
   ...props
 }) => (
-  <thead className={cn('bg-slate-950/60 text-xs uppercase font-medium text-slate-400 border-b border-slate-800', className)} {...props}>
+  <thead className={cn('sticky top-0 z-10 bg-surface-2 text-xs uppercase font-medium text-fg-subtle border-b border-border', className)} {...props}>
     {children}
   </thead>
 );
@@ -83,7 +83,7 @@ export const Tbody: React.FC<React.HTMLAttributes<HTMLTableSectionElement>> = ({
   className,
   ...props
 }) => (
-  <tbody className={cn('divide-y divide-slate-800/60 bg-slate-900/30', className)} {...props}>
+  <tbody className={cn('divide-y divide-border bg-transparent', className)} {...props}>
     {children}
   </tbody>
 );
@@ -93,7 +93,7 @@ export const Tr: React.FC<React.HTMLAttributes<HTMLTableRowElement>> = ({
   className,
   ...props
 }) => (
-  <tr className={cn('hover:bg-slate-800/40 transition-colors', className)} {...props}>
+  <tr className={cn('hover:bg-surface-2 transition-colors', className)} {...props}>
     {children}
   </tr>
 );
@@ -103,7 +103,7 @@ export const Th: React.FC<React.ThHTMLAttributes<HTMLTableCellElement>> = ({
   className,
   ...props
 }) => (
-  <th className={cn('px-4 py-3 font-semibold text-slate-200', className)} {...props}>
+  <th className={cn('px-4 py-3 font-semibold text-fg', className)} {...props}>
     {children}
   </th>
 );
@@ -113,7 +113,7 @@ export const Td: React.FC<React.TdHTMLAttributes<HTMLTableCellElement>> = ({
   className,
   ...props
 }) => (
-  <td className={cn('px-4 py-3 text-slate-300', className)} {...props}>
+  <td className={cn('px-4 py-3 text-fg-muted', className)} {...props}>
     {children}
   </td>
 );

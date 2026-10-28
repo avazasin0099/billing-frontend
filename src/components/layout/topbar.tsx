@@ -5,14 +5,15 @@ import {
   WifiOff,
   RefreshCw,
   LogOut,
-  KeyRound,
   ShieldCheck,
   Store,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { Button } from '../ui/button';
-import { Badge } from '../ui/card';
 import { SyncManager } from '@/offline/sync-manager';
 import { api } from '@/services/api-client';
+import { applyTheme, getStoredTheme, resolvesToDark, type Theme } from '@/lib/theme';
 
 export const Topbar: React.FC = () => {
   const navigate = useNavigate();
@@ -22,6 +23,14 @@ export const Topbar: React.FC = () => {
   const [userName, setUserName] = useState<string>('Owner');
   const [userRole, setUserRole] = useState<string>('OWNER');
   const [shopName, setShopName] = useState<string>('Main Branch - Dadar');
+  const [theme, setTheme] = useState<Theme>(getStoredTheme());
+  const isDark = resolvesToDark(theme);
+
+  const toggleTheme = () => {
+    const next: Theme = isDark ? 'light' : 'dark';
+    setTheme(next);
+    applyTheme(next);
+  };
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -85,14 +94,14 @@ export const Topbar: React.FC = () => {
   };
 
   return (
-    <header className="h-16 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 px-6 flex items-center justify-between sticky top-0 z-20">
+    <header className="h-16 bg-surface border-b border-border px-6 flex items-center justify-between shrink-0 z-20">
       {/* Current Active Shop Badge */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 bg-slate-950/70 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300">
-          <Store className="w-3.5 h-3.5 text-indigo-400" />
-          <span className="font-semibold text-white">{shopName}</span>
-          <span className="text-slate-500">•</span>
-          <span className="text-slate-400">GSTIN: 27AAPFU0939F1ZV</span>
+        <div className="flex items-center gap-2 bg-surface-2 border border-border rounded-xl px-3 py-1.5 text-xs text-fg-muted">
+          <Store className="w-3.5 h-3.5 text-brand" />
+          <span className="font-semibold text-fg">{shopName}</span>
+          <span className="text-fg-subtle">•</span>
+          <span className="text-fg-subtle">GSTIN: 27AAPFU0939F1ZV</span>
         </div>
       </div>
 
@@ -101,13 +110,13 @@ export const Topbar: React.FC = () => {
         {/* Offline / Online Status Indicator */}
         <div className="flex items-center gap-2">
           {isOnline ? (
-            <span className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
-              <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
+              <Wifi className="w-3.5 h-3.5" />
               <span>Online</span>
             </span>
           ) : (
-            <span className="flex items-center gap-1.5 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full animate-pulse">
-              <WifiOff className="w-3.5 h-3.5 text-amber-400" />
+            <span className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full animate-pulse">
+              <WifiOff className="w-3.5 h-3.5" />
               <span>Offline Mode</span>
             </span>
           )}
@@ -117,7 +126,7 @@ export const Topbar: React.FC = () => {
             <button
               onClick={handleManualSync}
               disabled={isSyncing || !isOnline}
-              className="flex items-center gap-1.5 text-xs bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2.5 py-1 rounded-full transition-colors"
+              className="flex items-center gap-1.5 text-xs bg-brand/10 hover:bg-brand/20 text-brand border border-brand/30 px-2.5 py-1 rounded-full transition-colors"
               title="Click to sync offline records"
             >
               <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -126,14 +135,24 @@ export const Topbar: React.FC = () => {
           )}
         </div>
 
-        <div className="h-4 w-px bg-slate-800"></div>
+        {/* Light / Dark Theme Toggle */}
+        <button
+          onClick={toggleTheme}
+          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          aria-label="Toggle color theme"
+          className="p-2 rounded-lg text-fg-subtle hover:text-fg hover:bg-surface-2 transition-colors"
+        >
+          {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+        </button>
+
+        <div className="h-4 w-px bg-border"></div>
 
         {/* User Role & Logout */}
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <div className="text-xs font-semibold text-white leading-tight">{userName}</div>
-            <div className="text-[10px] text-slate-400 flex items-center justify-end gap-1 font-mono">
-              <ShieldCheck className="w-3 h-3 text-indigo-400" />
+            <div className="text-xs font-semibold text-fg leading-tight">{userName}</div>
+            <div className="text-[10px] text-fg-subtle flex items-center justify-end gap-1 font-mono">
+              <ShieldCheck className="w-3 h-3 text-brand" />
               <span>{userRole}</span>
             </div>
           </div>
@@ -142,7 +161,7 @@ export const Topbar: React.FC = () => {
             variant="ghost"
             size="sm"
             onClick={handleLogout}
-            className="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-2 rounded-lg"
+            className="text-fg-subtle hover:text-rose-500 hover:bg-rose-500/10 p-2 rounded-lg"
             title="Log out or switch cashier"
           >
             <LogOut className="w-4 h-4" />

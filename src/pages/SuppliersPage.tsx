@@ -72,11 +72,11 @@ export default function SuppliersPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col h-full min-h-0 gap-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">Suppliers & Accounts Payable</h2>
-            <p className="text-xs text-slate-400 mt-1">Manage vendor ledgers, procurement terms, and payments</p>
+            <h2 className="text-xl font-bold text-fg tracking-tight">Suppliers & Accounts Payable</h2>
+            <p className="text-xs text-fg-subtle mt-1">Manage vendor ledgers, procurement terms, and payments</p>
           </div>
           <Button variant="primary" onClick={() => setIsAddModalOpen(true)}>
             <Plus className="w-4 h-4 mr-1.5" />
@@ -84,7 +84,7 @@ export default function SuppliersPage() {
           </Button>
         </div>
 
-        <Card>
+        <Card className="shrink-0">
           <div className="flex gap-3">
             <div className="flex-1">
               <Input
@@ -99,9 +99,9 @@ export default function SuppliersPage() {
           </div>
         </Card>
 
-        <Card>
+        <div className="flex-1 min-h-0">
           {suppliers.length === 0 ? (
-            <div className="text-center py-12 text-slate-500 text-sm">No suppliers registered yet.</div>
+            <Card className="h-full flex items-center justify-center text-fg-subtle text-sm">No suppliers registered yet.</Card>
           ) : (
             <Table>
               <Thead>
@@ -117,12 +117,12 @@ export default function SuppliersPage() {
               <Tbody>
                 {suppliers.map((s) => (
                   <Tr key={s.id}>
-                    <Td className="font-semibold text-white">{s.name}</Td>
+                    <Td className="font-semibold text-fg">{s.name}</Td>
                     <Td>{s.companyName || '-'}</Td>
                     <Td>{s.phone || '-'}</Td>
                     <Td className="font-mono text-xs">{s.gstin || '-'}</Td>
                     <Td>
-                      <span className={`font-bold ${Number(s.currentBalance) > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                      <span className={`font-bold ${Number(s.currentBalance) > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-fg-subtle'}`}>
                         {formatCurrency(s.currentBalance)}
                       </span>
                     </Td>
@@ -137,7 +137,7 @@ export default function SuppliersPage() {
               </Tbody>
             </Table>
           )}
-        </Card>
+        </div>
       </div>
 
       {/* Add Supplier Modal */}
@@ -160,12 +160,12 @@ export default function SuppliersPage() {
       {/* Ledger Modal */}
       <Modal isOpen={isLedgerModalOpen} onClose={() => setIsLedgerModalOpen(false)} title={`Supplier Ledger — ${selectedSupplier?.name}`} maxWidth="lg">
         <div className="space-y-4">
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
+          <div className="bg-surface-2 p-4 rounded-xl border border-border flex justify-between items-center">
             <div>
-              <span className="text-xs text-slate-500 block">Current Balance Payable:</span>
-              <span className="text-xl font-bold text-rose-400">{formatCurrency(selectedSupplier?.currentBalance)}</span>
+              <span className="text-xs text-fg-subtle block">Current Balance Payable:</span>
+              <span className="text-xl font-bold text-rose-600 dark:text-rose-400">{formatCurrency(selectedSupplier?.currentBalance)}</span>
             </div>
-            <div className="text-right text-xs text-slate-400">
+            <div className="text-right text-xs text-fg-subtle">
               <div>{selectedSupplier?.companyName}</div>
               <div>GSTIN: {selectedSupplier?.gstin || 'None'}</div>
             </div>
@@ -184,16 +184,16 @@ export default function SuppliersPage() {
             <Tbody>
               {supplierLedger.length === 0 ? (
                 <Tr>
-                  <Td colSpan={5} className="text-center py-6 text-slate-500">No ledger entries posted yet.</Td>
+                  <Td colSpan={5} className="text-center py-6 text-fg-subtle">No ledger entries posted yet.</Td>
                 </Tr>
               ) : (
                 supplierLedger.map((row) => (
                   <Tr key={row.id}>
                     <Td className="text-xs">{formatDate(row.createdAt)}</Td>
                     <Td className="text-xs font-mono">{row.entryType}</Td>
-                    <Td className="text-emerald-400">{Number(row.debitAmount) > 0 ? formatCurrency(row.debitAmount) : '-'}</Td>
-                    <Td className="text-rose-400">{Number(row.creditAmount) > 0 ? formatCurrency(row.creditAmount) : '-'}</Td>
-                    <Td className="text-right font-bold text-white">{formatCurrency(row.runningBalance)}</Td>
+                    <Td className="text-emerald-600 dark:text-emerald-400">{Number(row.debitAmount) > 0 ? formatCurrency(row.debitAmount) : '-'}</Td>
+                    <Td className="text-rose-600 dark:text-rose-400">{Number(row.creditAmount) > 0 ? formatCurrency(row.creditAmount) : '-'}</Td>
+                    <Td className="text-right font-bold text-fg">{formatCurrency(row.runningBalance)}</Td>
                   </Tr>
                 ))
               )}

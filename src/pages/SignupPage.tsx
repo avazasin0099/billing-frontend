@@ -50,19 +50,19 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4">
+    <div className="min-h-screen bg-surface-2 flex flex-col justify-center items-center p-4">
       <div className="w-full max-w-lg">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-400 shadow-xl shadow-indigo-500/25 mb-3">
-            <Store className="w-6 h-6 text-white" />
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-emerald-400 shadow-xl shadow-emerald-500/25 mb-3">
+            <Store className="w-6 h-6 text-fg" />
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Register Your Shop</h1>
-          <p className="text-sm text-slate-400 mt-1">Setup your business in under 60 seconds</p>
+          <h1 className="text-2xl font-bold text-fg tracking-tight">Register Your Shop</h1>
+          <p className="text-sm text-fg-subtle mt-1">Setup your business in under 60 seconds</p>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-8 backdrop-blur-xl">
+        <div className="bg-surface border border-border rounded-2xl shadow-2xl p-6 sm:p-8 backdrop-blur-xl">
           {errorMessage && (
-            <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
+            <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs">
               {errorMessage}
             </div>
           )}
@@ -126,11 +126,11 @@ export default function SignupPage() {
                 placeholder="27AAPFU0939F1ZV"
               />
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">State Code</label>
+                <label className="block text-xs font-medium text-fg-muted mb-1.5">State Code</label>
                 <select
                   value={stateCode}
                   onChange={(e) => setStateCode(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-surface-2 border border-border rounded-lg px-3.5 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="27">27 - Maharashtra</option>
                   <option value="29">29 - Karnataka</option>
@@ -150,9 +150,9 @@ export default function SignupPage() {
           </form>
         </div>
 
-        <p className="text-center text-xs text-slate-500 mt-6">
+        <p className="text-center text-xs text-fg-subtle mt-6">
           Already registered?{' '}
-          <Link to="/login" className="text-indigo-400 hover:text-indigo-300 font-medium">
+          <Link to="/login" className="text-brand hover:text-brand font-medium">
             Sign in
           </Link>
         </p>

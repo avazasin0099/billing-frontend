@@ -64,11 +64,11 @@ export default function PaymentsPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col h-full min-h-0 gap-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">Recorded Customer Payments</h2>
-            <p className="text-xs text-slate-400 mt-1">Manual payment entries for bills and debt settlement</p>
+            <h2 className="text-xl font-bold text-fg tracking-tight">Recorded Customer Payments</h2>
+            <p className="text-xs text-fg-subtle mt-1">Manual payment entries for bills and debt settlement</p>
           </div>
           <Button variant="primary" onClick={() => setIsRecordModalOpen(true)}>
             <Plus className="w-4 h-4 mr-1.5" />
@@ -77,21 +77,21 @@ export default function PaymentsPage() {
         </div>
 
         {/* Notice on Manual Settlement */}
-        <div className="bg-indigo-950/40 border border-indigo-900/40 p-3.5 rounded-xl flex items-center gap-3 text-xs text-indigo-300">
-          <AlertCircle className="w-4 h-4 shrink-0 text-indigo-400" />
+        <div className="bg-brand/5 dark:bg-emerald-950/40 border border-brand/20 p-3.5 rounded-xl flex items-center gap-3 text-xs text-brand shrink-0">
+          <AlertCircle className="w-4 h-4 shrink-0 text-brand" />
           <span>
             <strong>Manual Entry Mode:</strong> Payments recorded here reflect external settlement (cash handed over counter, card swiped on terminal, or verified counter UPI scan). Bill Pro does not initiate online transactions or store banking credentials.
           </span>
         </div>
 
         {/* Filter Card */}
-        <Card>
+        <Card className="shrink-0">
           <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-400 font-medium">Filter by Method:</span>
+            <span className="text-xs text-fg-subtle font-medium">Filter by Method:</span>
             <select
               value={methodFilter}
               onChange={(e) => setMethodFilter(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white"
+              className="bg-surface-2 border border-border rounded-lg px-3 py-1.5 text-xs text-fg"
             >
               <option value="">All Methods</option>
               <option value="CASH">Cash</option>
@@ -104,9 +104,9 @@ export default function PaymentsPage() {
         </Card>
 
         {/* Payments Table */}
-        <Card>
+        <div className="flex-1 min-h-0">
           {payments.length === 0 ? (
-            <div className="text-center py-12 text-slate-500 text-sm">No payment records found.</div>
+            <Card className="h-full flex items-center justify-center text-fg-subtle text-sm">No payment records found.</Card>
           ) : (
             <Table>
               <Thead>
@@ -123,30 +123,30 @@ export default function PaymentsPage() {
                 {payments.map((p) => (
                   <Tr key={p.id}>
                     <Td className="text-xs">{formatDate(p.paymentDate)}</Td>
-                    <Td className="font-semibold text-white">{p.customer?.name || 'Walk-in Retail'}</Td>
+                    <Td className="font-semibold text-fg">{p.customer?.name || 'Walk-in Retail'}</Td>
                     <Td>
                       <Badge variant="info">{p.paymentMethod}</Badge>
                     </Td>
-                    <Td className="font-bold text-emerald-400">{formatCurrency(p.amount)}</Td>
+                    <Td className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(p.amount)}</Td>
                     <Td className="font-mono text-xs">{p.transactionReference || '-'}</Td>
-                    <Td className="font-mono text-xs text-indigo-400">{p.invoice?.invoiceNumber || '-'}</Td>
+                    <Td className="font-mono text-xs text-brand">{p.invoice?.invoiceNumber || '-'}</Td>
                   </Tr>
                 ))}
               </Tbody>
             </Table>
           )}
-        </Card>
+        </div>
       </div>
 
       {/* Record Payment Modal */}
       <Modal isOpen={isRecordModalOpen} onClose={() => setIsRecordModalOpen(false)} title="Record Customer Payment Received" maxWidth="md">
         <form onSubmit={handleRecordPayment} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">Customer Account</label>
+            <label className="block text-xs font-medium text-fg-muted mb-1">Customer Account</label>
             <select
               value={customerId}
               onChange={(e) => setCustomerId(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-fg"
             >
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -158,11 +158,11 @@ export default function PaymentsPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Payment Method</label>
+              <label className="block text-xs font-medium text-fg-muted mb-1">Payment Method</label>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-fg"
               >
                 <option value="CASH">Cash</option>
                 <option value="UPI">UPI</option>

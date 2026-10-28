@@ -86,11 +86,11 @@ export default function PurchasesPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col h-full min-h-0 gap-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">Inward Purchases & Goods Receipt</h2>
-            <p className="text-xs text-slate-400 mt-1">Record supplier invoices, restock items, and track payables</p>
+            <h2 className="text-xl font-bold text-fg tracking-tight">Inward Purchases & Goods Receipt</h2>
+            <p className="text-xs text-fg-subtle mt-1">Record supplier invoices, restock items, and track payables</p>
           </div>
           <Button variant="primary" onClick={() => setIsNewPurchaseOpen(true)}>
             <Plus className="w-4 h-4 mr-1.5" />
@@ -98,11 +98,11 @@ export default function PurchasesPage() {
           </Button>
         </div>
 
-        <Card>
+        <div className="flex-1 min-h-0">
           {purchases.length === 0 ? (
-            <div className="text-center py-12 text-slate-500 text-sm">
-              No purchase bills recorded yet. Tap &quot;Record Inward Purchase&quot; to stock up.
-            </div>
+            <Card className="h-full flex items-center justify-center text-center text-fg-subtle text-sm">
+              No purchase bills recorded yet. Tap “Record Inward Purchase” to stock up.
+            </Card>
           ) : (
             <Table>
               <Thead>
@@ -120,13 +120,13 @@ export default function PurchasesPage() {
               <Tbody>
                 {purchases.map((p) => (
                   <Tr key={p.id}>
-                    <Td className="font-mono font-bold text-white">{p.purchaseNumber}</Td>
+                    <Td className="font-mono font-bold text-fg">{p.purchaseNumber}</Td>
                     <Td className="font-mono text-xs">{p.supplierInvoiceNumber || '-'}</Td>
                     <Td>{formatDate(p.purchaseDate)}</Td>
-                    <Td className="font-semibold text-white">{p.supplier?.name}</Td>
+                    <Td className="font-semibold text-fg">{p.supplier?.name}</Td>
                     <Td className="font-bold">{formatCurrency(p.totalAmount)}</Td>
-                    <Td className="text-emerald-400">{formatCurrency(p.paidAmount)}</Td>
-                    <Td className={`font-semibold ${Number(p.balanceAmount) > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                    <Td className="text-emerald-600 dark:text-emerald-400">{formatCurrency(p.paidAmount)}</Td>
+                    <Td className={`font-semibold ${Number(p.balanceAmount) > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-fg-subtle'}`}>
                       {formatCurrency(p.balanceAmount)}
                     </Td>
                     <Td>
@@ -139,18 +139,18 @@ export default function PurchasesPage() {
               </Tbody>
             </Table>
           )}
-        </Card>
+        </div>
       </div>
 
       {/* New Purchase Modal */}
       <Modal isOpen={isNewPurchaseOpen} onClose={() => setIsNewPurchaseOpen(false)} title="Record Inward Purchase" maxWidth="md">
         <form onSubmit={handleCreatePurchase} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">Select Supplier</label>
+            <label className="block text-xs font-medium text-fg-muted mb-1">Select Supplier</label>
             <select
               value={supplierId}
               onChange={(e) => setSupplierId(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-fg"
             >
               {suppliers.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -176,7 +176,7 @@ export default function PurchasesPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">Item to Inward</label>
+            <label className="block text-xs font-medium text-fg-muted mb-1">Item to Inward</label>
             <select
               value={selectedItemId}
               onChange={(e) => {
@@ -184,7 +184,7 @@ export default function PurchasesPage() {
                 const selected = items.find((i) => i.id === e.target.value);
                 if (selected) setUnitCost(Number(selected.purchasePrice));
               }}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-fg"
             >
               {items.map((i) => (
                 <option key={i.id} value={i.id}>
@@ -213,9 +213,9 @@ export default function PurchasesPage() {
             />
           </div>
 
-          <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex justify-between text-xs font-bold text-white">
+          <div className="bg-surface-2 p-3 rounded-xl border border-border flex justify-between text-xs font-bold text-fg">
             <span>Estimated Total:</span>
-            <span className="text-indigo-400">{formatCurrency(purchaseQty * unitCost)}</span>
+            <span className="text-brand">{formatCurrency(purchaseQty * unitCost)}</span>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -227,11 +227,11 @@ export default function PurchasesPage() {
               onChange={(e) => setPaidAmount(Number(e.target.value))}
             />
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Payment Method</label>
+              <label className="block text-xs font-medium text-fg-muted mb-1">Payment Method</label>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-fg"
               >
                 <option value="BANK_TRANSFER">Bank Transfer / NEFT</option>
                 <option value="CASH">Cash</option>

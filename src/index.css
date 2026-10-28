@@ -2,48 +2,98 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ------------------------------------------------------------------ */
+/*  Theme tokens — LIGHT is the default (:root); DARK via .dark class  */
+/*  Values are space-separated RGB channels so Tailwind's             */
+/*  rgb(var(--x) / <alpha-value>) opacity utilities keep working.      */
+/* ------------------------------------------------------------------ */
 @layer base {
+  :root {
+    color-scheme: light;
+    --canvas: 248 250 252;      /* page background        (slate-50)  */
+    --surface: 255 255 255;     /* cards / panels         (white)     */
+    --surface-2: 241 245 249;   /* insets / wells         (slate-100) */
+    --border: 226 232 240;      /* hairline borders       (slate-200) */
+    --fg: 15 23 42;             /* primary text           (slate-900) */
+    --fg-muted: 71 85 105;      /* secondary text         (slate-600) */
+    --fg-subtle: 100 116 139;   /* tertiary / hints       (slate-500) */
+    --brand: 5 150 105;         /* accent text & icons    (emerald-600) */
+    --ring: 16 185 129;         /* focus ring             (emerald-500) */
+  }
+
+  :root.dark {
+    color-scheme: dark;
+    --canvas: 2 6 23;           /* slate-950 */
+    --surface: 15 23 42;        /* slate-900 */
+    --surface-2: 2 6 23;        /* slate-950 */
+    --border: 30 41 59;         /* slate-800 */
+    --fg: 241 245 249;          /* slate-100 */
+    --fg-muted: 148 163 184;    /* slate-400 */
+    --fg-subtle: 100 116 139;   /* slate-500 */
+    --brand: 52 211 153;        /* emerald-400 — brighter on dark */
+    --ring: 16 185 129;         /* emerald-500 */
+  }
+
   body {
-    @apply bg-slate-950 text-slate-100 antialiased;
+    background-color: rgb(var(--canvas));
+    color: rgb(var(--fg));
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
-/* Custom scrollbars */
+/* Custom scrollbars — themed */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #090d16;
+  background: rgb(var(--canvas));
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: rgb(var(--border));
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: rgb(var(--fg-subtle));
 }
 
-/* Print specific formatting for ESC/POS thermal 58mm/80mm and A4 */
+/* Thermal receipt paper texture & printing (always light paper) */
 @media print {
   body {
     background: white !important;
     color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .printable-receipt,
+  .printable-receipt * {
+    visibility: visible !important;
+  }
+
+  .printable-receipt {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 80mm !important;
+    margin: 0 auto !important;
+    padding: 4mm !important;
+    box-shadow: none !important;
+    border: none !important;
+    color: black !important;
+    background: white !important;
   }
 
   .no-print {
     display: none !important;
-  }
-
-  .printable-receipt {
-    width: 80mm !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    box-shadow: none !important;
-    border: none !important;
   }
 }
