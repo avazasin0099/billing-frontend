@@ -22,7 +22,8 @@ export const Topbar: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [userName, setUserName] = useState<string>('Owner');
   const [userRole, setUserRole] = useState<string>('OWNER');
-  const [shopName, setShopName] = useState<string>('Main Branch - Dadar');
+  const [shopName, setShopName] = useState<string>('My Shop');
+  const [shopGstin, setShopGstin] = useState<string>('');
   const [theme, setTheme] = useState<Theme>(getStoredTheme());
   const isDark = resolvesToDark(theme);
 
@@ -66,7 +67,8 @@ export const Topbar: React.FC = () => {
       if (storedShop) {
         try {
           const s = JSON.parse(storedShop);
-          setShopName(s.name || 'Main Branch');
+          setShopName(s.name || 'My Shop');
+          setShopGstin(s.gstin || '');
         } catch {}
       }
     }
@@ -100,8 +102,12 @@ export const Topbar: React.FC = () => {
         <div className="flex items-center gap-2 bg-surface-2 border border-border rounded-xl px-3 py-1.5 text-xs text-fg-muted">
           <Store className="w-3.5 h-3.5 text-brand" />
           <span className="font-semibold text-fg">{shopName}</span>
-          <span className="text-fg-subtle">•</span>
-          <span className="text-fg-subtle">GSTIN: 27AAPFU0939F1ZV</span>
+          {shopGstin && (
+            <>
+              <span className="text-fg-subtle">•</span>
+              <span className="text-fg-subtle">GSTIN: {shopGstin}</span>
+            </>
+          )}
         </div>
       </div>
 

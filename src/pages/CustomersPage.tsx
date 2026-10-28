@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Eye, Phone, FileText, ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { Plus, Eye, Pencil, Trash2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, Badge, Input } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, Thead, Tbody, Tr, Th, Td, Modal } from '@/components/ui/modal';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { api } from '@/services/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Customer } from '@/types';
@@ -16,6 +17,9 @@ export default function CustomersPage() {
   const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerLedger, setCustomerLedger] = useState<any[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Form state
   const [name, setName] = useState('');
@@ -38,25 +42,75 @@ export default function CustomersPage() {
     fetchCustomers();
   }, []);
 
-  const handleCreateCustomer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await api.post('/parties/customers', {
-        name,
-        phone,
-        email: email || undefined,
-        gstin: gstin || undefined,
-        creditLimit: Number(creditLimit),
-        openingBalance: Number(openingBalance),
-      });
+  const resetForm = () => {
+    setName('');
+    setPhone('');
+    setEmail('');
+    setGstin('');
+    setCreditLimit(5000);
+    setOpeningBalance(0);
+  };
 
-      alert('Customer account created!');
+  const openAdd = () => {
+    resetForm();
+    setEditingId(null);
+    setIsAddModalOpen(true);
+  };
+
+  const openEdit = (c: Customer) => {
+    setEditingId(c.id);
+    setName(c.name || '');
+    setPhone(c.phone || '');
+    setEmail((c as any).email || '');
+    setGstin(c.gstin || '');
+    setCreditLimit(Number(c.creditLimit) || 0);
+    setIsAddModalOpen(true);
+  };
+
+  const handleSubmitCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      if (editingId) {
+        await api.patch(`/parties/customers/${editingId}`, {
+          name,
+          phone,
+          email: email || undefined,
+          gstin: gstin || undefined,
+          creditLimit: Number(creditLimit),
+        });
+      } else {
+        await api.post('/parties/customers', {
+          name,
+          phone,
+          email: email || undefined,
+          gstin: gstin || undefined,
+          creditLimit: Number(creditLimit),
+          openingBalance: Number(openingBalance),
+        });
+      }
       setIsAddModalOpen(false);
-      setName('');
-      setPhone('');
+      setEditingId(null);
+      resetForm();
       fetchCustomers();
     } catch (err: any) {
-      alert(`Failed to add customer: ${err.message}`);
+      alert(`Failed to save customer: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteCustomer = async () => {
+    if (!deleteTarget) return;
+    setIsSaving(true);
+    try {
+      await api.delete(`/parties/customers/${deleteTarget.id}`);
+      setDeleteTarget(null);
+      fetchCustomers();
+    } catch (err: any) {
+      alert(`Failed to remove customer: ${err.message}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -79,7 +133,7 @@ export default function CustomersPage() {
             <h2 className="text-xl font-bold text-fg tracking-tight">Customers & Udhaar Ledger</h2>
             <p className="text-xs text-fg-subtle mt-1">Manage accounts receivable, credit limits, and ledger statements</p>
           </div>
-          <Button variant="primary" onClick={() => setIsAddModalOpen(true)}>
+          <Button variant="primary" onClick={openAdd}>
             <Plus className="w-4 h-4 mr-1.5" />
             Add Customer
           </Button>
@@ -131,11 +185,19 @@ export default function CustomersPage() {
                         {formatCurrency(c.currentBalance)}
                       </span>
                     </Td>
-                    <Td className="text-right">
-                      <Button variant="secondary" size="sm" onClick={() => handleViewLedger(c)}>
-                        <Eye className="w-3.5 h-3.5 mr-1" />
-                        View Statement
-                      </Button>
+                    <Td>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="secondary" size="sm" onClick={() => handleViewLedger(c)}>
+                          <Eye className="w-3.5 h-3.5 mr-1" />
+                          Statement
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(c)} title="Edit customer" className="hover:text-brand">
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(c)} title="Remove customer" className="hover:text-rose-600 dark:hover:text-rose-400">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </Td>
                   </Tr>
                 ))}
@@ -145,9 +207,14 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {/* Add Customer Modal */}
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Create Customer Account" maxWidth="md">
-        <form onSubmit={handleCreateCustomer} className="space-y-4">
+      {/* Add / Edit Customer Modal */}
+      <Modal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        title={editingId ? 'Edit Customer' : 'Create Customer Account'}
+        maxWidth="md"
+      >
+        <form onSubmit={handleSubmitCustomer} className="space-y-4">
           <Input label="Full Name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Suresh Sharma" />
           <div className="grid grid-cols-2 gap-3">
             <Input label="Mobile Phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="9820011223" />
@@ -156,13 +223,32 @@ export default function CustomersPage() {
           <Input label="GSTIN (for B2B registered party)" value={gstin} onChange={(e) => setGstin(e.target.value.toUpperCase())} placeholder="27AABCM8891P1ZO" />
           <div className="grid grid-cols-2 gap-3">
             <Input label="Credit Limit (₹)" type="number" value={creditLimit} onChange={(e) => setCreditLimit(Number(e.target.value))} />
-            <Input label="Opening Udhaar Balance (₹)" type="number" value={openingBalance} onChange={(e) => setOpeningBalance(Number(e.target.value))} />
+            {!editingId && (
+              <Input label="Opening Udhaar Balance (₹)" type="number" value={openingBalance} onChange={(e) => setOpeningBalance(Number(e.target.value))} />
+            )}
           </div>
-          <Button type="submit" variant="primary" size="md" className="w-full mt-4">
-            Save Customer
+          <Button type="submit" variant="primary" size="md" className="w-full mt-4" isLoading={isSaving}>
+            {editingId ? 'Save Changes' : 'Save Customer'}
           </Button>
         </form>
       </Modal>
+
+      {/* Remove Customer Confirm */}
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteCustomer}
+        isLoading={isSaving}
+        title="Remove Customer"
+        confirmLabel="Remove"
+        message={
+          <>
+            <strong className="text-fg">{deleteTarget?.name}</strong> will be removed from your active
+            customer list. Their ledger history is preserved. Customers with an outstanding balance
+            can’t be removed until settled.
+          </>
+        }
+      />
 
       {/* Ledger Statement Modal */}
       <Modal isOpen={isLedgerModalOpen} onClose={() => setIsLedgerModalOpen(false)} title={`Statement of Account — ${selectedCustomer?.name}`} maxWidth="lg">

@@ -68,6 +68,7 @@ export default function BillingPosPage() {
 
   const [soundActive, setSoundActive] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [checkoutKey, setCheckoutKey] = useState('');
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -257,6 +258,10 @@ export default function BillingPosPage() {
     if (cart.length === 0) return;
     setActivePaymentTab('CASH');
     setSplitPayments([{ method: 'CASH', amount: roundedTotal }]);
+    // Fresh idempotency key per checkout so retries/double-clicks can't double-post this bill.
+    setCheckoutKey(
+      typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `ck-${Date.now()}`
+    );
     setIsPaymentModalOpen(true);
   };
 
@@ -358,6 +363,7 @@ export default function BillingPosPage() {
     const payload = {
       customerId: selectedCustomerId || undefined,
       invoiceDate: new Date().toISOString().slice(0, 10),
+      idempotencyKey: checkoutKey || undefined,
       items: cart.map((ci) => ({
         itemId: ci.item.id,
         quantity: ci.quantity,

@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { Building2, Plus, Eye, Phone } from 'lucide-react';
+import { Plus, Eye, Pencil, Trash2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, Input } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, Thead, Tbody, Tr, Th, Td, Modal } from '@/components/ui/modal';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { api } from '@/services/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Supplier } from '@/types';
@@ -16,6 +17,9 @@ export default function SuppliersPage() {
   const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [supplierLedger, setSupplierLedger] = useState<any[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Form state
   const [name, setName] = useState('');
@@ -38,24 +42,75 @@ export default function SuppliersPage() {
     fetchSuppliers();
   }, []);
 
-  const handleCreateSupplier = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await api.post('/parties/suppliers', {
-        name,
-        companyName: companyName || undefined,
-        phone,
-        email: email || undefined,
-        gstin: gstin || undefined,
-        openingBalance: Number(openingBalance),
-      });
+  const resetForm = () => {
+    setName('');
+    setCompanyName('');
+    setPhone('');
+    setEmail('');
+    setGstin('');
+    setOpeningBalance(0);
+  };
 
-      alert('Supplier account created!');
+  const openAdd = () => {
+    resetForm();
+    setEditingId(null);
+    setIsAddModalOpen(true);
+  };
+
+  const openEdit = (s: Supplier) => {
+    setEditingId(s.id);
+    setName(s.name || '');
+    setCompanyName((s as any).companyName || '');
+    setPhone(s.phone || '');
+    setEmail((s as any).email || '');
+    setGstin(s.gstin || '');
+    setIsAddModalOpen(true);
+  };
+
+  const handleSubmitSupplier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      if (editingId) {
+        await api.patch(`/parties/suppliers/${editingId}`, {
+          name,
+          companyName: companyName || undefined,
+          phone,
+          email: email || undefined,
+          gstin: gstin || undefined,
+        });
+      } else {
+        await api.post('/parties/suppliers', {
+          name,
+          companyName: companyName || undefined,
+          phone,
+          email: email || undefined,
+          gstin: gstin || undefined,
+          openingBalance: Number(openingBalance),
+        });
+      }
       setIsAddModalOpen(false);
-      setName('');
+      setEditingId(null);
+      resetForm();
       fetchSuppliers();
     } catch (err: any) {
-      alert(`Failed to add supplier: ${err.message}`);
+      alert(`Failed to save supplier: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteSupplier = async () => {
+    if (!deleteTarget) return;
+    setIsSaving(true);
+    try {
+      await api.delete(`/parties/suppliers/${deleteTarget.id}`);
+      setDeleteTarget(null);
+      fetchSuppliers();
+    } catch (err: any) {
+      alert(`Failed to remove supplier: ${err.message}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -78,7 +133,7 @@ export default function SuppliersPage() {
             <h2 className="text-xl font-bold text-fg tracking-tight">Suppliers & Accounts Payable</h2>
             <p className="text-xs text-fg-subtle mt-1">Manage vendor ledgers, procurement terms, and payments</p>
           </div>
-          <Button variant="primary" onClick={() => setIsAddModalOpen(true)}>
+          <Button variant="primary" onClick={openAdd}>
             <Plus className="w-4 h-4 mr-1.5" />
             Add Supplier
           </Button>
@@ -126,11 +181,19 @@ export default function SuppliersPage() {
                         {formatCurrency(s.currentBalance)}
                       </span>
                     </Td>
-                    <Td className="text-right">
-                      <Button variant="secondary" size="sm" onClick={() => handleViewLedger(s)}>
-                        <Eye className="w-3.5 h-3.5 mr-1" />
-                        View Ledger
-                      </Button>
+                    <Td>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="secondary" size="sm" onClick={() => handleViewLedger(s)}>
+                          <Eye className="w-3.5 h-3.5 mr-1" />
+                          Ledger
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(s)} title="Edit supplier" className="hover:text-brand">
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(s)} title="Remove supplier" className="hover:text-rose-600 dark:hover:text-rose-400">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </Td>
                   </Tr>
                 ))}
@@ -140,9 +203,14 @@ export default function SuppliersPage() {
         </div>
       </div>
 
-      {/* Add Supplier Modal */}
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add Supplier" maxWidth="md">
-        <form onSubmit={handleCreateSupplier} className="space-y-4">
+      {/* Add / Edit Supplier Modal */}
+      <Modal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        title={editingId ? 'Edit Supplier' : 'Add Supplier'}
+        maxWidth="md"
+      >
+        <form onSubmit={handleSubmitSupplier} className="space-y-4">
           <Input label="Contact Person Name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ramesh Shah" />
           <Input label="Company / Firm Name" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="e.g. Shah Trading Co." />
           <div className="grid grid-cols-2 gap-3">
@@ -150,12 +218,31 @@ export default function SuppliersPage() {
             <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="orders@shahtrading.com" />
           </div>
           <Input label="GSTIN" value={gstin} onChange={(e) => setGstin(e.target.value.toUpperCase())} placeholder="27AAACS1234K1ZZ" />
-          <Input label="Opening Balance We Owe (₹)" type="number" value={openingBalance} onChange={(e) => setOpeningBalance(Number(e.target.value))} />
-          <Button type="submit" variant="primary" size="md" className="w-full mt-4">
-            Save Supplier
+          {!editingId && (
+            <Input label="Opening Balance We Owe (₹)" type="number" value={openingBalance} onChange={(e) => setOpeningBalance(Number(e.target.value))} />
+          )}
+          <Button type="submit" variant="primary" size="md" className="w-full mt-4" isLoading={isSaving}>
+            {editingId ? 'Save Changes' : 'Save Supplier'}
           </Button>
         </form>
       </Modal>
+
+      {/* Remove Supplier Confirm */}
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteSupplier}
+        isLoading={isSaving}
+        title="Remove Supplier"
+        confirmLabel="Remove"
+        message={
+          <>
+            <strong className="text-fg">{deleteTarget?.name}</strong> will be removed from your active
+            supplier list. Ledger history is preserved. Suppliers with an outstanding payable can’t be
+            removed until settled.
+          </>
+        }
+      />
 
       {/* Ledger Modal */}
       <Modal isOpen={isLedgerModalOpen} onClose={() => setIsLedgerModalOpen(false)} title={`Supplier Ledger — ${selectedSupplier?.name}`} maxWidth="lg">

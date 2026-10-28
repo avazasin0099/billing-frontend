@@ -42,11 +42,18 @@ export default function LoginPage() {
       setErrorMessage('Please enter a valid 4-to-6 digit PIN');
       return;
     }
-    setIsLoading(true);
     setErrorMessage('');
 
+    const shopId = localStorage.getItem('billpro_shop_id');
+    if (!shopId) {
+      setErrorMessage('Sign in with email & password once on this device before using Counter PIN.');
+      return;
+    }
+
+    setIsLoading(true);
+
     try {
-      const data = await api.post('/auth/pin-login', { pin });
+      const data = await api.post('/auth/pin-login', { pin, shopId });
       if (data.tokens?.accessToken) {
         localStorage.setItem('billpro_token', data.tokens.accessToken);
         localStorage.setItem('billpro_refresh_token', data.tokens.refreshToken);
@@ -185,7 +192,8 @@ export default function LoginPage() {
             </form>
           )}
 
-          {/* Demo Credentials Quick Switcher */}
+          {/* Demo Credentials Quick Switcher — development builds only (never shipped to production) */}
+          {import.meta.env.DEV && (
           <div className="mt-6 pt-5 border-t border-border">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-subtle block mb-2 text-center">
               Quick Demo Fill
@@ -217,6 +225,7 @@ export default function LoginPage() {
               </button>
             </div>
           </div>
+          )}
         </div>
 
         {/* Footer Signup Link */}
