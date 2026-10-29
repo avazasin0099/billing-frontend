@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Wallet, Plus, ArrowDownRight, ArrowUpRight, DollarSign, Building } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, Badge, Input } from '@/components/ui/card';
+import { StatCard } from '@/components/ui/stat-card';
 import { Button } from '@/components/ui/button';
 import { Table, Thead, Tbody, Tr, Th, Td, Modal } from '@/components/ui/modal';
 import { api } from '@/services/api-client';
@@ -67,8 +68,8 @@ export default function ExpensesPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">Expenses, Cash Book & Bank Book</h2>
-            <p className="text-xs text-slate-400 mt-1">Operational overheads and physical drawer cash reconciliation</p>
+            <h2 className="text-xl font-bold text-fg tracking-tight">Expenses, Cash Book & Bank Book</h2>
+            <p className="text-xs text-fg-subtle mt-1">Operational overheads and physical drawer cash reconciliation</p>
           </div>
           <Button variant="primary" onClick={() => setIsAddModalOpen(true)}>
             <Plus className="w-4 h-4 mr-1.5" />
@@ -78,39 +79,28 @@ export default function ExpensesPage() {
 
         {/* 2 Financial Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Card>
-            <div className="flex items-center justify-between text-slate-400 mb-1">
-              <span className="text-xs font-semibold uppercase tracking-wider">Physical Cash Drawer Balance</span>
-              <Wallet className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div className="text-2xl font-bold text-emerald-400">
-              {formatCurrency(cashBook?.netCashBalance || 0)}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">
-              Inflows: {formatCurrency(cashBook?.totalInflow || 0)} • Outflows: {formatCurrency(cashBook?.totalOutflow || 0)}
-            </div>
-          </Card>
-
-          <Card>
-            <div className="flex items-center justify-between text-slate-400 mb-1">
-              <span className="text-xs font-semibold uppercase tracking-wider">Bank & Digital Inflows Balance</span>
-              <Building className="w-4 h-4 text-indigo-400" />
-            </div>
-            <div className="text-2xl font-bold text-indigo-400">
-              {formatCurrency(bankBook?.netBankBalance || 0)}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">
-              UPI, Card & Bank settlements
-            </div>
-          </Card>
+          <StatCard
+            label="Physical Cash Drawer Balance"
+            value={formatCurrency(cashBook?.netCashBalance || 0)}
+            icon={Wallet}
+            tone="emerald"
+            footerLeft={`Inflows ${formatCurrency(cashBook?.totalInflow || 0)} • Outflows ${formatCurrency(cashBook?.totalOutflow || 0)}`}
+          />
+          <StatCard
+            label="Bank & Digital Inflows Balance"
+            value={formatCurrency(bankBook?.netBankBalance || 0)}
+            icon={Building}
+            tone="brand"
+            footerLeft="UPI, Card & Bank settlements"
+          />
         </div>
 
         {/* Tab Selection */}
-        <div className="flex bg-slate-900 border border-slate-800 p-1 rounded-xl w-fit">
+        <div className="flex bg-surface border border-border p-1 rounded-xl w-fit">
           <button
             onClick={() => setActiveTab('expenses')}
             className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'expenses' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              activeTab === 'expenses' ? 'bg-emerald-600 text-white shadow-md' : 'text-fg-subtle hover:text-fg'
             }`}
           >
             Expenses Log
@@ -118,7 +108,7 @@ export default function ExpensesPage() {
           <button
             onClick={() => setActiveTab('cashbook')}
             className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'cashbook' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              activeTab === 'cashbook' ? 'bg-emerald-600 text-white shadow-md' : 'text-fg-subtle hover:text-fg'
             }`}
           >
             Cash Book Entries
@@ -126,7 +116,7 @@ export default function ExpensesPage() {
           <button
             onClick={() => setActiveTab('bankbook')}
             className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'bankbook' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              activeTab === 'bankbook' ? 'bg-emerald-600 text-white shadow-md' : 'text-fg-subtle hover:text-fg'
             }`}
           >
             Bank Book Entries
@@ -137,7 +127,7 @@ export default function ExpensesPage() {
         {activeTab === 'expenses' && (
           <Card>
             {expenses.length === 0 ? (
-              <div className="text-center py-12 text-slate-500 text-sm">No operational expenses recorded.</div>
+              <div className="text-center py-12 text-fg-subtle text-sm">No operational expenses recorded.</div>
             ) : (
               <Table>
                 <Thead>
@@ -154,13 +144,13 @@ export default function ExpensesPage() {
                   {expenses.map((exp) => (
                     <Tr key={exp.id}>
                       <Td>{formatDate(exp.expenseDate)}</Td>
-                      <Td className="font-semibold text-white">{exp.category}</Td>
+                      <Td className="font-semibold text-fg">{exp.category}</Td>
                       <Td>{exp.recipientName || '-'}</Td>
                       <Td>
                         <Badge variant="neutral">{exp.paymentMethod}</Badge>
                       </Td>
-                      <Td className="font-bold text-rose-400">{formatCurrency(exp.amount)}</Td>
-                      <Td className="text-xs text-slate-400">{exp.notes || '-'}</Td>
+                      <Td className="font-bold text-rose-600 dark:text-rose-400">{formatCurrency(exp.amount)}</Td>
+                      <Td className="text-xs text-fg-subtle">{exp.notes || '-'}</Td>
                     </Tr>
                   ))}
                 </Tbody>
@@ -185,10 +175,10 @@ export default function ExpensesPage() {
                 {cashBook?.entries?.map((e: any) => (
                   <Tr key={e.id}>
                     <Td className="text-xs">{formatDate(e.entryDate)}</Td>
-                    <Td className="font-medium text-white">{e.description}</Td>
-                    <Td className="text-emerald-400 font-bold">{Number(e.inflowAmount) > 0 ? formatCurrency(e.inflowAmount) : '-'}</Td>
-                    <Td className="text-rose-400 font-bold">{Number(e.outflowAmount) > 0 ? formatCurrency(e.outflowAmount) : '-'}</Td>
-                    <Td className="text-xs font-mono text-slate-400">{e.referenceType}</Td>
+                    <Td className="font-medium text-fg">{e.description}</Td>
+                    <Td className="text-emerald-600 dark:text-emerald-400 font-bold">{Number(e.inflowAmount) > 0 ? formatCurrency(e.inflowAmount) : '-'}</Td>
+                    <Td className="text-rose-600 dark:text-rose-400 font-bold">{Number(e.outflowAmount) > 0 ? formatCurrency(e.outflowAmount) : '-'}</Td>
+                    <Td className="text-xs font-mono text-fg-subtle">{e.referenceType}</Td>
                   </Tr>
                 ))}
               </Tbody>
@@ -213,13 +203,13 @@ export default function ExpensesPage() {
                 {bankBook?.entries?.map((e: any) => (
                   <Tr key={e.id}>
                     <Td className="text-xs">{formatDate(e.entryDate)}</Td>
-                    <Td className="font-medium text-white">{e.description}</Td>
+                    <Td className="font-medium text-fg">{e.description}</Td>
                     <Td>
                       <Badge variant="info">{e.paymentMethod}</Badge>
                     </Td>
-                    <Td className="text-emerald-400 font-bold">{Number(e.inflowAmount) > 0 ? formatCurrency(e.inflowAmount) : '-'}</Td>
-                    <Td className="text-rose-400 font-bold">{Number(e.outflowAmount) > 0 ? formatCurrency(e.outflowAmount) : '-'}</Td>
-                    <Td className="text-xs font-mono text-slate-400">{e.transactionReference || '-'}</Td>
+                    <Td className="text-emerald-600 dark:text-emerald-400 font-bold">{Number(e.inflowAmount) > 0 ? formatCurrency(e.inflowAmount) : '-'}</Td>
+                    <Td className="text-rose-600 dark:text-rose-400 font-bold">{Number(e.outflowAmount) > 0 ? formatCurrency(e.outflowAmount) : '-'}</Td>
+                    <Td className="text-xs font-mono text-fg-subtle">{e.transactionReference || '-'}</Td>
                   </Tr>
                 ))}
               </Tbody>
@@ -232,11 +222,11 @@ export default function ExpensesPage() {
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Record Operational Expense" maxWidth="md">
         <form onSubmit={handleCreateExpense} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">Expense Category</label>
+            <label className="block text-xs font-medium text-fg-muted mb-1">Expense Category</label>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-fg"
             >
               <option value="Tea & Refreshments">Tea & Refreshments / Pantry</option>
               <option value="Electricity & Utilities">Electricity & Utilities</option>
@@ -258,11 +248,11 @@ export default function ExpensesPage() {
               onChange={(e) => setAmount(Number(e.target.value))}
             />
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Payment Method</label>
+              <label className="block text-xs font-medium text-fg-muted mb-1">Payment Method</label>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-fg"
               >
                 <option value="CASH">Cash Drawer</option>
                 <option value="UPI">Counter UPI</option>

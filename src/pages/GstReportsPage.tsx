@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { FileSpreadsheet, Download, ShieldCheck, Calendar } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardTitle, Badge } from '@/components/ui/card';
+import { StatCard } from '@/components/ui/stat-card';
 import { Button } from '@/components/ui/button';
 import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/modal';
 import { api } from '@/services/api-client';
@@ -44,8 +45,8 @@ export default function GstReportsPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">GST Reports (CA Ready)</h2>
-            <p className="text-xs text-slate-400 mt-1">GSTR-1 outward supplies summary & GSTR-3B tax liability schedules</p>
+            <h2 className="text-xl font-bold text-fg tracking-tight">GST Reports (CA Ready)</h2>
+            <p className="text-xs text-fg-subtle mt-1">GSTR-1 outward supplies summary & GSTR-3B tax liability schedules</p>
           </div>
           <Button variant="primary" onClick={handleDownloadJson}>
             <Download className="w-4 h-4 mr-1.5" />
@@ -55,37 +56,34 @@ export default function GstReportsPage() {
 
         {/* 4 Tax Liability Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <div className="text-xs text-slate-400 uppercase font-medium">Total Taxable Turnover</div>
-            <div className="text-2xl font-bold text-white mt-1">
-              {formatCurrency(gstData?.summary?.totalTaxableValue || 0)}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">{gstData?.summary?.totalInvoices || 0} Total outward invoices</div>
-          </Card>
-
-          <Card>
-            <div className="text-xs text-slate-400 uppercase font-medium">CGST Liability (Central)</div>
-            <div className="text-2xl font-bold text-indigo-400 mt-1">
-              {formatCurrency(gstData?.summary?.totalCgst || 0)}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">Intra-state central tax component</div>
-          </Card>
-
-          <Card>
-            <div className="text-xs text-slate-400 uppercase font-medium">SGST / UTGST Liability (State)</div>
-            <div className="text-2xl font-bold text-indigo-400 mt-1">
-              {formatCurrency(gstData?.summary?.totalSgst || 0)}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">Intra-state state tax component</div>
-          </Card>
-
-          <Card>
-            <div className="text-xs text-slate-400 uppercase font-medium">Total Net Tax Liability</div>
-            <div className="text-2xl font-bold text-emerald-400 mt-1">
-              {formatCurrency(gstData?.summary?.totalTaxLiability || 0)}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">CGST + SGST + IGST + Cess</div>
-          </Card>
+          <StatCard
+            label="Total Taxable Turnover"
+            value={formatCurrency(gstData?.summary?.totalTaxableValue || 0)}
+            icon={FileSpreadsheet}
+            tone="brand"
+            footerLeft={`${gstData?.summary?.totalInvoices || 0} total outward invoices`}
+          />
+          <StatCard
+            label="CGST Liability (Central)"
+            value={formatCurrency(gstData?.summary?.totalCgst || 0)}
+            icon={ShieldCheck}
+            tone="sky"
+            footerLeft="Intra-state central tax component"
+          />
+          <StatCard
+            label="SGST / UTGST Liability"
+            value={formatCurrency(gstData?.summary?.totalSgst || 0)}
+            icon={ShieldCheck}
+            tone="sky"
+            footerLeft="Intra-state state tax component"
+          />
+          <StatCard
+            label="Total Net Tax Liability"
+            value={formatCurrency(gstData?.summary?.totalTaxLiability || 0)}
+            icon={Calendar}
+            tone="emerald"
+            footerLeft="CGST + SGST + IGST + Cess"
+          />
         </div>
 
         {/* Rate-Wise GST Breakdown Table */}
@@ -109,18 +107,18 @@ export default function GstReportsPage() {
             <Tbody>
               {!gstData?.rateWiseBreakdown || Object.keys(gstData.rateWiseBreakdown).length === 0 ? (
                 <Tr>
-                  <Td colSpan={7} className="text-center py-6 text-slate-500">No GST transactions recorded in this period.</Td>
+                  <Td colSpan={7} className="text-center py-6 text-fg-subtle">No GST transactions recorded in this period.</Td>
                 </Tr>
               ) : (
                 Object.entries(gstData.rateWiseBreakdown).map(([rate, vals]: [string, any]) => (
                   <Tr key={rate}>
-                    <Td className="font-bold text-white">{rate}</Td>
+                    <Td className="font-bold text-fg">{rate}</Td>
                     <Td>{formatCurrency(vals.taxable)}</Td>
                     <Td>{formatCurrency(vals.cgst)}</Td>
                     <Td>{formatCurrency(vals.sgst)}</Td>
                     <Td>{formatCurrency(vals.igst)}</Td>
                     <Td>{formatCurrency(vals.cess)}</Td>
-                    <Td className="text-right font-bold text-indigo-400">
+                    <Td className="text-right font-bold text-brand">
                       {formatCurrency(vals.cgst + vals.sgst + vals.igst + vals.cess)}
                     </Td>
                   </Tr>
@@ -134,7 +132,7 @@ export default function GstReportsPage() {
         <Card>
           <CardHeader>
             <CardTitle>B2B Tax Invoices (With Customer GSTIN)</CardTitle>
-            <span className="text-xs text-slate-400">{gstData?.summary?.b2bCount || 0} Invoices</span>
+            <span className="text-xs text-fg-subtle">{gstData?.summary?.b2bCount || 0} Invoices</span>
           </CardHeader>
           <Table>
             <Thead>
@@ -151,18 +149,18 @@ export default function GstReportsPage() {
             <Tbody>
               {!gstData?.b2bInvoices || gstData.b2bInvoices.length === 0 ? (
                 <Tr>
-                  <Td colSpan={7} className="text-center py-6 text-slate-500">No B2B invoices in this period. Retail sales fall under B2C.</Td>
+                  <Td colSpan={7} className="text-center py-6 text-fg-subtle">No B2B invoices in this period. Retail sales fall under B2C.</Td>
                 </Tr>
               ) : (
                 gstData.b2bInvoices.map((inv: any) => (
                   <Tr key={inv.id}>
-                    <Td className="font-mono font-bold text-white">{inv.invoiceNumber}</Td>
+                    <Td className="font-mono font-bold text-fg">{inv.invoiceNumber}</Td>
                     <Td>{formatDate(inv.invoiceDate)}</Td>
                     <Td>{inv.customer?.name}</Td>
                     <Td className="font-mono text-xs">{inv.customer?.gstin}</Td>
                     <Td>{formatCurrency(inv.taxableAmount)}</Td>
                     <Td>{formatCurrency(Number(inv.cgstAmount) + Number(inv.sgstAmount) + Number(inv.igstAmount))}</Td>
-                    <Td className="text-right font-bold text-white">{formatCurrency(inv.totalAmount)}</Td>
+                    <Td className="text-right font-bold text-fg">{formatCurrency(inv.totalAmount)}</Td>
                   </Tr>
                 ))
               )}

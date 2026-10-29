@@ -176,3 +176,37 @@ export interface Invoice {
   payments?: PaymentRecord[];
   createdAt: string;
 }
+
+export interface PurchaseLine {
+  id?: string;
+  itemId: string;
+  itemName?: string;
+  quantity: number;
+  unitCost: number;
+  gstRate?: number;
+  taxAmount?: number;
+  lineTotal?: number;
+  batchNumber?: string;
+  expiryDate?: string;
+}
+
+export interface Purchase {
+  id: string;
+  shopId: string;
+  supplierId: string;
+  supplier?: Supplier;
+  purchaseNumber: string;
+  supplierInvoiceNumber?: string;
+  purchaseDate: string;
+  subtotalAmount: number;
+  taxAmount: number;
+  totalAmount: number;
+  paidAmount: number;
+  balanceAmount: number;
+  paymentStatus: PaymentStatus;
+  status: string;
+  notes?: string;
+  lines?: PurchaseLine[];
+  createdAt: string;
+  updatedAt: string;
+}

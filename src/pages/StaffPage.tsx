@@ -63,8 +63,8 @@ export default function StaffPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">Staff & Counter Permissions</h2>
-            <p className="text-xs text-slate-400 mt-1">Manage cashier access, manager overrides, and counter PIN logins</p>
+            <h2 className="text-xl font-bold text-fg tracking-tight">Staff & Counter Permissions</h2>
+            <p className="text-xs text-fg-subtle mt-1">Manage cashier access, manager overrides, and counter PIN logins</p>
           </div>
           <Button variant="primary" onClick={() => setIsAddModalOpen(true)}>
             <Plus className="w-4 h-4 mr-1.5" />
@@ -74,32 +74,32 @@ export default function StaffPage() {
 
         {/* Roles Permission Reference Card */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="border-indigo-500/20 bg-indigo-950/10">
-            <h4 className="text-sm font-bold text-indigo-400 flex items-center gap-1.5 mb-2">
+          <Card className="border-brand/20 bg-brand/5 dark:bg-emerald-950/10">
+            <h4 className="text-sm font-bold text-brand flex items-center gap-1.5 mb-2">
               <ShieldCheck className="w-4 h-4" />
               Owner
             </h4>
-            <p className="text-xs text-slate-400 leading-relaxed">
+            <p className="text-xs text-fg-subtle leading-relaxed">
               Full unconstrained access to financial reports, P&L, supplier purchase costs, tax exports, and staff management.
             </p>
           </Card>
 
-          <Card className="border-slate-800">
-            <h4 className="text-sm font-bold text-white flex items-center gap-1.5 mb-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <Card className="border-border">
+            <h4 className="text-sm font-bold text-fg flex items-center gap-1.5 mb-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               Manager
             </h4>
-            <p className="text-xs text-slate-400 leading-relaxed">
+            <p className="text-xs text-fg-subtle leading-relaxed">
               Can add products, update prices, record inward stock purchases, approve stock-takes, and issue sales returns.
             </p>
           </Card>
 
-          <Card className="border-slate-800">
-            <h4 className="text-sm font-bold text-white flex items-center gap-1.5 mb-2">
-              <ShieldCheck className="w-4 h-4 text-slate-400" />
+          <Card className="border-border">
+            <h4 className="text-sm font-bold text-fg flex items-center gap-1.5 mb-2">
+              <ShieldCheck className="w-4 h-4 text-fg-subtle" />
               Cashier
             </h4>
-            <p className="text-xs text-slate-400 leading-relaxed">
+            <p className="text-xs text-fg-subtle leading-relaxed">
               High-speed counter billing only. Cannot view shop purchase costs, overall profit margins, or alter master pricing.
             </p>
           </Card>
@@ -121,7 +121,7 @@ export default function StaffPage() {
             <Tbody>
               {staffList.map((m) => (
                 <Tr key={m.membershipId}>
-                  <Td className="font-semibold text-white">{m.user?.name}</Td>
+                  <Td className="font-semibold text-fg">{m.user?.name}</Td>
                   <Td>{m.user?.email}</Td>
                   <Td>{m.user?.phone || '-'}</Td>
                   <Td>
@@ -131,7 +131,7 @@ export default function StaffPage() {
                   </Td>
                   <Td className="text-xs">{m.user?.lastLoginAt ? formatDate(m.user.lastLoginAt) : 'Never'}</Td>
                   <Td>
-                    <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                    <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                       Active
                     </span>
@@ -156,11 +156,11 @@ export default function StaffPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">Role & Permissions</label>
+            <label className="block text-xs font-medium text-fg-muted mb-1">Role & Permissions</label>
             <select
               value={role}
               onChange={(e) => setRole(e.target.value as any)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-fg"
             >
               <option value="CASHIER">Cashier (Point of Sale counter billing only)</option>
               <option value="MANAGER">Manager (POS + Stock inward + Inventory count adjustments)</option>

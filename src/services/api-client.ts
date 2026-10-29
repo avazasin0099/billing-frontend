@@ -106,6 +106,13 @@ class ApiClient {
     });
   }
 
+  public put<T = any>(endpoint: string, body?: any): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'PUT',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
   public patch<T = any>(endpoint: string, body?: any): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'PATCH',

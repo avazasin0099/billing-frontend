@@ -12,9 +12,16 @@ import {
   Clock,
   Printer,
   ChevronRight,
+  Wallet,
+  ArrowDownLeft,
+  ArrowUpRight as ArrowUpRightIcon,
+  Sparkles,
+  QrCode,
+  RotateCcw,
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardTitle, Badge } from '@/components/ui/card';
+import { StatCard } from '@/components/ui/stat-card';
 import { Button } from '@/components/ui/button';
 import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/modal';
 import { api } from '@/services/api-client';
@@ -35,7 +42,7 @@ export default function DashboardPage() {
           api.get('/reports/sales').catch(() => null),
           api.get('/inventory/summary').catch(() => null),
           api.get('/reports/customer-dues').catch(() => null),
-          api.get('/invoices', { limit: 5 }).catch(() => ({ invoices: [] })),
+          api.get('/invoices', { limit: 8 }).catch(() => ({ invoices: [] })),
         ]);
 
         if (sales) setSalesSummary(sales);
@@ -52,26 +59,32 @@ export default function DashboardPage() {
     fetchData();
   }, []);
 
+  const totalBilled = salesSummary?.totalBilled || 0;
+  const totalBills = salesSummary?.totalInvoices || 0;
+  const avgBillValue = totalBills > 0 ? Math.round(totalBilled / totalBills) : 0;
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Welcome & Quick Action Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-gradient-to-r from-indigo-950/40 via-slate-900 to-slate-900 p-6 rounded-2xl border border-indigo-900/30">
+        {/* Standard Page Header (consistent with every other tab) */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">Today&apos;s Store Overview</h2>
-            <p className="text-xs text-slate-400 mt-1">Live point of sale and stock metrics</p>
+            <h2 className="text-xl font-bold text-fg tracking-tight">Dashboard</h2>
+            <p className="text-xs text-fg-subtle mt-1">
+              Real-time snapshot of sales, collections, inventory valuations, and customer credit ledger.
+            </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link to="/billing">
-              <Button variant="primary" size="md" className="shadow-lg shadow-indigo-600/30">
-                <ShoppingCart className="w-4 h-4 mr-1.5" />
-                Open POS Billing
+              <Button variant="primary" className="font-semibold">
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                Open POS Counter [F9]
               </Button>
             </Link>
-            <Link to="/items">
-              <Button variant="secondary" size="md">
-                <Plus className="w-4 h-4 mr-1.5" />
-                Add Item
+            <Link to="/returns">
+              <Button variant="secondary">
+                <RotateCcw className="w-4 h-4 mr-2 text-brand" />
+                Process Return
               </Button>
             </Link>
           </div>
@@ -79,97 +92,68 @@ export default function DashboardPage() {
 
         {/* 4 Primary Metric KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Total Sales */}
-          <Card className="hover:border-slate-700 transition-colors">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-medium uppercase tracking-wider">Total Sales</span>
-              <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg">
-                <TrendingUp className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="text-2xl font-bold text-white">
-              {formatCurrency(salesSummary?.totalBilled || 0)}
-            </div>
-            <div className="mt-2 flex items-center text-[11px] text-slate-400">
-              <span className="text-emerald-400 font-semibold mr-1.5">
-                {salesSummary?.totalInvoices || 0} Bills
-              </span>
-              <span>posted</span>
-            </div>
-          </Card>
-
-          {/* Customer Udhaar / Dues */}
-          <Card className="hover:border-slate-700 transition-colors">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-medium uppercase tracking-wider">Customer Udhaar</span>
-              <div className="p-2 bg-amber-500/10 text-amber-400 rounded-lg">
-                <Users className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="text-2xl font-bold text-amber-400">
-              {formatCurrency(duesSummary?.totalOutstanding || 0)}
-            </div>
-            <div className="mt-2 flex items-center text-[11px] text-slate-400">
-              <span className="text-slate-300 font-semibold mr-1.5">
-                {duesSummary?.customerCount || 0} Accounts
-              </span>
-              <span>with pending balance</span>
-            </div>
-          </Card>
-
-          {/* Total Stock Units */}
-          <Card className="hover:border-slate-700 transition-colors">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-medium uppercase tracking-wider">Stock Valuation</span>
-              <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg">
-                <Boxes className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="text-2xl font-bold text-white">
-              {formatCurrency(inventorySummary?.totalPurchaseValuation || 0)}
-            </div>
-            <div className="mt-2 flex items-center text-[11px] text-slate-400">
-              <span className="text-indigo-400 font-semibold mr-1.5">
-                {inventorySummary?.totalStockUnits || 0} Units
-              </span>
-              <span>across catalog</span>
-            </div>
-          </Card>
-
-          {/* Low Stock Alerts */}
-          <Card className="hover:border-slate-700 transition-colors">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-medium uppercase tracking-wider">Reorder Alerts</span>
-              <div className="p-2 bg-rose-500/10 text-rose-400 rounded-lg">
-                <AlertTriangle className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="text-2xl font-bold text-rose-400">
-              {inventorySummary?.lowStockCount || 0} Items
-            </div>
-            <div className="mt-2 flex items-center text-[11px] text-slate-400">
-              <Link to="/inventory" className="text-rose-400 hover:underline flex items-center">
-                <span>View low stock</span>
+          <StatCard
+            label="Total Revenue"
+            value={formatCurrency(totalBilled)}
+            icon={TrendingUp}
+            tone="emerald"
+            footerLeft={<span className="text-fg-muted font-medium">{totalBills} bills issued</span>}
+            footerRight={`Avg ${formatCurrency(avgBillValue)}`}
+          />
+          <StatCard
+            label="Customer Udhaar"
+            value={formatCurrency(duesSummary?.totalOutstanding || 0)}
+            icon={Users}
+            tone="amber"
+            footerLeft={`${duesSummary?.customerCount || 0} accounts pending`}
+            footerRight={<Link to="/customers" className="text-brand hover:underline">View ledger</Link>}
+          />
+          <StatCard
+            label="Stock Valuation"
+            value={formatCurrency(inventorySummary?.totalPurchaseValuation || 0)}
+            icon={Boxes}
+            tone="brand"
+            footerLeft={`${inventorySummary?.totalStockUnits || 0} units in stock`}
+            footerRight={<Link to="/inventory" className="text-brand hover:underline">Audits</Link>}
+          />
+          <StatCard
+            label="Low Stock Alert"
+            value={`${inventorySummary?.lowStockCount || 0} Items`}
+            icon={AlertTriangle}
+            tone="rose"
+            footerLeft="Requires PO inward"
+            footerRight={
+              <Link to="/purchases" className="text-brand hover:underline inline-flex items-center">
+                Order stock
                 <ChevronRight className="w-3 h-3 ml-0.5" />
               </Link>
-            </div>
-          </Card>
+            }
+          />
         </div>
 
-        {/* Payment Methods Collection Breakdown */}
+        {/* Collections Breakdown by Payment Tender */}
         {salesSummary?.paymentMethodTotals && (
           <Card>
-            <CardHeader>
-              <CardTitle>Collections by Payment Method</CardTitle>
-              <Badge variant="info">Manual Ledger Record</Badge>
+            <CardHeader className="border-b border-border pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm">Collections by Tender Method</CardTitle>
+                  <p className="text-xs text-fg-subtle mt-0.5">Automated cash and bank book reconciliation</p>
+                </div>
+                <Badge variant="info">Multi-Tender Reconciled</Badge>
+              </div>
             </CardHeader>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {Object.entries(salesSummary.paymentMethodTotals).map(([method, amount]) => (
-                <div key={method} className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-1">
-                    {method.replace('_', ' ')}
-                  </span>
-                  <span className="text-sm font-semibold text-white">
+                <div key={method} className="bg-surface-2 p-3.5 rounded-xl border border-border">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] uppercase font-bold text-fg-subtle tracking-wider">
+                      {method.replace('_', ' ')}
+                    </span>
+                    {method === 'UPI' && <QrCode className="w-3.5 h-3.5 text-brand" />}
+                    {method === 'CASH' && <Wallet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
+                  </div>
+                  <span className="text-base font-bold text-fg">
                     {formatCurrency(amount as number)}
                   </span>
                 </div>
@@ -178,42 +162,50 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {/* Recent Invoices Table */}
+        {/* Recent Counter Invoices Table */}
         <Card>
-          <CardHeader>
-            <CardTitle>Recent Point-of-Sale Invoices</CardTitle>
-            <Link to="/invoices">
-              <Button variant="ghost" size="sm">
-                View All Invoices
-                <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
-              </Button>
-            </Link>
+          <CardHeader className="border-b border-border pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-sm">Recent Counter Invoices</CardTitle>
+                <p className="text-xs text-fg-subtle mt-0.5">Real-time point-of-sale transaction audit</p>
+              </div>
+              <Link to="/invoices">
+                <Button variant="ghost" size="sm" className="text-xs text-brand hover:text-fg">
+                  View Full Audit Log
+                  <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
+                </Button>
+              </Link>
+            </div>
           </CardHeader>
 
-          {recentInvoices.length === 0 ? (
-            <div className="text-center py-10 text-slate-500 text-sm">
-              No bills recorded yet. Tap &quot;Open POS Billing&quot; to issue your first bill.
+          {isLoading ? (
+            <div className="text-center py-12 text-fg-subtle text-xs">Loading sales records...</div>
+          ) : recentInvoices.length === 0 ? (
+            <div className="text-center py-12 text-fg-subtle text-xs">
+              No bills recorded yet. Tap &quot;Open POS Counter&quot; to issue your first bill.
             </div>
           ) : (
             <Table>
               <Thead>
                 <Tr>
                   <Th>Invoice #</Th>
-                  <Th>Date</Th>
+                  <Th>Date & Time</Th>
                   <Th>Customer</Th>
-                  <Th>Taxable</Th>
-                  <Th>Total</Th>
+                  <Th>Taxable (₹)</Th>
+                  <Th>Total (₹)</Th>
                   <Th>Payment Status</Th>
+                  <Th className="text-right">Action</Th>
                 </Tr>
               </Thead>
               <Tbody>
                 {recentInvoices.map((inv) => (
                   <Tr key={inv.id}>
-                    <Td className="font-mono font-semibold text-white">{inv.invoiceNumber}</Td>
+                    <Td className="font-mono font-semibold text-fg">{inv.invoiceNumber}</Td>
                     <Td>{formatDate(inv.invoiceDate)}</Td>
                     <Td>{inv.customer?.name || 'Walk-in Retail'}</Td>
                     <Td>{formatCurrency(inv.taxableAmount)}</Td>
-                    <Td className="font-semibold text-white">{formatCurrency(inv.totalAmount)}</Td>
+                    <Td className="font-semibold text-fg">{formatCurrency(inv.totalAmount)}</Td>
                     <Td>
                       <Badge
                         variant={
@@ -226,6 +218,11 @@ export default function DashboardPage() {
                       >
                         {inv.paymentStatus}
                       </Badge>
+                    </Td>
+                    <Td className="text-right">
+                      <Link to="/invoices" className="text-xs text-brand hover:underline">
+                        Details
+                      </Link>
                     </Td>
                   </Tr>
                 ))}
