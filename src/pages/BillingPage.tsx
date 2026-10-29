@@ -27,10 +27,29 @@ import { Card, Badge, Input } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { api } from '@/services/api-client';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, cn } from '@/lib/utils';
 import { Item, CartItem, Customer, PaymentMethod } from '@/types';
 import { LocalDbService } from '@/offline/pending-operations';
 import { posAudio } from '@/lib/sound';
+
+// Soft, deterministic colour swatch for the product thumbnail placeholder (used when an item
+// has no image). Light tint + readable accent, so it reads like a photo slot in both themes.
+const THUMB_SWATCHES: Array<[string, string]> = [
+  ['#ecfdf5', '#047857'], // emerald
+  ['#eff6ff', '#1d4ed8'], // blue
+  ['#fffbeb', '#b45309'], // amber
+  ['#fdf4ff', '#a21caf'], // fuchsia
+  ['#fff1f2', '#be123c'], // rose
+  ['#f0f9ff', '#0369a1'], // sky
+  ['#f0fdf4', '#15803d'], // green
+  ['#f5f3ff', '#6d28d9'], // violet
+];
+function thumbSwatch(seed: string) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  const [bg, fg] = THUMB_SWATCHES[h % THUMB_SWATCHES.length];
+  return { bg, fg };
+}
 
 export default function BillingPosPage() {
   const [items, setItems] = useState<Item[]>([]);
@@ -430,11 +449,11 @@ export default function BillingPosPage() {
 
   return (
     <DashboardLayout>
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-full min-h-[32rem]">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:h-full lg:min-h-0">
         {/* Left Side: Product Search, Barcode & Grid (7 cols) */}
-        <div className="lg:col-span-7 flex flex-col h-full space-y-3">
-          {/* Top Search, Barcode & Audio Toolbar */}
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+        <div className="lg:col-span-7 flex flex-col gap-3 lg:h-full lg:min-h-0">
+          {/* Top Search, Barcode & Audio Toolbar (fixed) */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center shrink-0">
             <div className="sm:col-span-6 relative">
               <Search className="w-4 h-4 text-fg-subtle absolute left-3.5 top-3 pointer-events-none" />
               <input
@@ -508,64 +527,125 @@ export default function BillingPosPage() {
             ))}
           </div>
 
-          {/* Product Items Grid */}
-          <div className="flex-1 overflow-y-auto pr-1">
+          {/* Product Items Grid (scrolls; header above stays fixed) */}
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1">
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
               {filteredItems.map((item) => {
                 const stockNum = Number(item.currentStock);
                 const isOutOfStock = stockNum <= 0;
+                const isLow = !isOutOfStock && stockNum <= 10;
                 const discount = item.mrp && item.mrp > item.sellingPrice ? item.mrp - item.sellingPrice : 0;
+                const cartLine = cart.find((ci) => ci.item.id === item.id);
+                const qty = cartLine?.quantity || 0;
+                const sw = thumbSwatch(item.category || item.name || 'x');
+                const initial = (item.name || '?').trim().charAt(0).toUpperCase();
 
                 return (
-                  <button
+                  <div
                     key={item.id}
-                    onClick={() => addToCart(item)}
-                    className="text-left p-3 rounded-xl border transition-all flex flex-col justify-between bg-surface border-border hover:border-brand/60 hover:shadow-lg hover:shadow-emerald-500/5 active:scale-[0.98] group relative overflow-hidden"
-                  >
-                    {discount > 0 && (
-                      <span className="absolute top-0 right-0 bg-emerald-500/10 border-b border-l border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[9px] font-bold px-1.5 py-0.5 rounded-bl">
-                        Save {formatCurrency(discount)}
-                      </span>
+                    className={cn(
+                      'rounded-xl border bg-surface overflow-hidden flex flex-col transition-all',
+                      qty > 0
+                        ? 'border-brand ring-1 ring-brand/30 shadow-sm'
+                        : 'border-border hover:border-brand/50 hover:shadow-md',
+                      isOutOfStock && 'opacity-70'
                     )}
-
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <span className="text-[9px] font-semibold text-fg-subtle bg-surface-2 px-1.5 py-0.5 rounded border border-border">
-                          {item.category || 'General'}
-                        </span>
-                        <span className="text-[9px] text-brand font-bold">
+                  >
+                    {/* Thumbnail + tap-to-add body */}
+                    <button
+                      type="button"
+                      onClick={() => addToCart(item)}
+                      disabled={isOutOfStock}
+                      className="text-left w-full disabled:cursor-not-allowed group"
+                    >
+                      <div
+                        className="h-20 flex items-center justify-center relative overflow-hidden"
+                        style={{ backgroundColor: sw.bg }}
+                      >
+                        {item.imageUrl ? (
+                          <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="text-3xl font-black opacity-80 transition-transform group-hover:scale-110" style={{ color: sw.fg }}>
+                            {initial}
+                          </span>
+                        )}
+                        {discount > 0 && (
+                          <span className="absolute top-1.5 right-1.5 bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                            Save {formatCurrency(discount)}
+                          </span>
+                        )}
+                        <span className="absolute bottom-1.5 left-1.5 text-[9px] font-semibold text-fg bg-surface/90 backdrop-blur-sm border border-border px-1.5 py-0.5 rounded-full">
                           {item.gstRate}% GST
                         </span>
-                      </div>
-                      <h4 className="text-xs font-semibold text-fg line-clamp-2 leading-snug group-hover:text-brand">
-                        {item.name}
-                      </h4>
-                    </div>
-
-                    <div className="mt-2.5 pt-2 border-t border-border flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-bold text-fg">
-                          {formatCurrency(item.sellingPrice)}
-                        </div>
-                        {item.mrp > item.sellingPrice && (
-                          <span className="text-[10px] text-fg-subtle line-through">
-                            MRP {formatCurrency(item.mrp)}
+                        {qty > 0 && (
+                          <span className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full bg-brand text-white text-[10px] font-bold flex items-center justify-center shadow">
+                            {qty}
                           </span>
                         )}
                       </div>
+
+                      <div className="px-2.5 pt-2">
+                        <h4 className="text-xs font-semibold text-fg line-clamp-2 leading-snug min-h-[2rem] group-hover:text-brand">
+                          {item.name}
+                        </h4>
+                        <div className="mt-1 flex items-baseline gap-1.5">
+                          <span className="text-sm font-bold text-fg">{formatCurrency(item.sellingPrice)}</span>
+                          {item.mrp > item.sellingPrice && (
+                            <span className="text-[10px] text-fg-subtle line-through">
+                              {formatCurrency(item.mrp)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Footer: stock + ADD / stepper */}
+                    <div className="px-2.5 pb-2.5 pt-2 mt-auto flex items-center justify-between gap-2">
                       <span
-                        className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${
+                        className={cn(
+                          'text-[9px] font-semibold px-1.5 py-0.5 rounded',
                           isOutOfStock
-                            ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
-                            : stockNum <= 10
-                            ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
+                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                            : isLow
+                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
                             : 'bg-surface-2 text-fg-subtle'
-                        }`}
+                        )}
                       >
-                        {stockNum} {item.unit?.code || 'pcs'}
+                        {isOutOfStock ? 'Out of stock' : `${stockNum} ${item.unit?.code || 'pcs'}`}
                       </span>
+
+                      {qty > 0 ? (
+                        <div className="flex items-center gap-0.5 bg-brand/10 border border-brand/30 rounded-lg p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.id, qty - 1)}
+                            className="p-1 text-brand hover:bg-brand/20 rounded"
+                            aria-label="Decrease quantity"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="w-5 text-center text-xs font-bold text-brand">{qty}</span>
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.id, qty + 1)}
+                            className="p-1 text-brand hover:bg-brand/20 rounded"
+                            aria-label="Increase quantity"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => addToCart(item)}
+                          disabled={isOutOfStock}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed px-2.5 py-1.5 rounded-lg shadow-sm active:scale-95 transition-transform"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> ADD
+                        </button>
+                      )}
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -573,7 +653,7 @@ export default function BillingPosPage() {
         </div>
 
         {/* Right Side: Active Cart, Hold Drawer & Checkout (5 cols) */}
-        <div className="lg:col-span-5 flex flex-col h-full bg-surface border border-border rounded-2xl overflow-hidden shadow-2xl">
+        <div className="lg:col-span-5 lg:sticky lg:top-0 flex flex-col max-h-[calc(100vh-7rem)] bg-surface border border-border rounded-2xl overflow-hidden shadow-xl">
           {/* Cart Header: Customer Selection & Quick Add */}
           <div className="p-3.5 border-b border-border bg-surface-2 space-y-2.5">
             <div className="flex items-center justify-between">
