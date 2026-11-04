@@ -25,10 +25,10 @@ export default function ItemsPage() {
   const [barcode, setBarcode] = useState('');
   const [hsnCode, setHsnCode] = useState('');
   const [category, setCategory] = useState('Grocery Staples');
-  const [purchasePrice, setPurchasePrice] = useState<number>(0);
-  const [sellingPrice, setSellingPrice] = useState<number>(0);
-  const [mrp, setMrp] = useState<number>(0);
-  const [gstRate, setGstRate] = useState<number>(5);
+  const [purchasePrice, setPurchasePrice] = useState<number | ''>('');
+  const [sellingPrice, setSellingPrice] = useState<number | ''>('');
+  const [mrp, setMrp] = useState<number | ''>('');
+  const [gstRate, setGstRate] = useState<number>(0);
   const [openingStock, setOpeningStock] = useState<number>(10);
   const [reorderLevel, setReorderLevel] = useState<number>(5);
 
@@ -54,10 +54,10 @@ export default function ItemsPage() {
     setBarcode('');
     setHsnCode('');
     setCategory('Grocery Staples');
-    setPurchasePrice(0);
-    setSellingPrice(0);
-    setMrp(0);
-    setGstRate(5);
+    setPurchasePrice('');
+    setSellingPrice('');
+    setMrp('');
+    setGstRate(0);
     setOpeningStock(10);
     setReorderLevel(5);
   };
@@ -296,7 +296,7 @@ export default function ItemsPage() {
               step="0.01"
               required
               value={purchasePrice}
-              onChange={(e) => setPurchasePrice(Number(e.target.value))}
+              onChange={(e) => setPurchasePrice(e.target.value === '' ? '' : Number(e.target.value))}
             />
             <Input
               label="Selling Price (₹)"
@@ -304,14 +304,14 @@ export default function ItemsPage() {
               step="0.01"
               required
               value={sellingPrice}
-              onChange={(e) => setSellingPrice(Number(e.target.value))}
+              onChange={(e) => setSellingPrice(e.target.value === '' ? '' : Number(e.target.value))}
             />
             <Input
               label="MRP (₹)"
               type="number"
               step="0.01"
               value={mrp}
-              onChange={(e) => setMrp(Number(e.target.value))}
+              onChange={(e) => setMrp(e.target.value === '' ? '' : Number(e.target.value))}
             />
           </div>
 

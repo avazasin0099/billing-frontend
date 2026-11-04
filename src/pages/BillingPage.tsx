@@ -21,7 +21,9 @@ import {
   AlertCircle,
   Sparkles,
   ArrowRight,
+  PackageOpen,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, Badge, Input } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -50,6 +52,23 @@ function thumbSwatch(seed: string) {
   const [bg, fg] = THUMB_SWATCHES[h % THUMB_SWATCHES.length];
   return { bg, fg };
 }
+
+// All GST state/UT codes — a customer in any state must be selectable, else intra/inter-state
+// GST is mis-classified. Kept in sync with the backend INDIAN_STATES map.
+const INDIAN_STATE_CODES: Array<[string, string]> = [
+  ['01', 'Jammu & Kashmir'], ['02', 'Himachal Pradesh'], ['03', 'Punjab'], ['04', 'Chandigarh'],
+  ['05', 'Uttarakhand'], ['06', 'Haryana'], ['07', 'Delhi'], ['08', 'Rajasthan'],
+  ['09', 'Uttar Pradesh'], ['10', 'Bihar'], ['11', 'Sikkim'], ['12', 'Arunachal Pradesh'],
+  ['13', 'Nagaland'], ['14', 'Manipur'], ['15', 'Mizoram'], ['16', 'Tripura'], ['17', 'Meghalaya'],
+  ['18', 'Assam'], ['19', 'West Bengal'], ['20', 'Jharkhand'], ['21', 'Odisha'], ['22', 'Chhattisgarh'],
+  ['23', 'Madhya Pradesh'], ['24', 'Gujarat'], ['26', 'Dadra & Nagar Haveli and Daman & Diu'],
+  ['27', 'Maharashtra'], ['29', 'Karnataka'], ['30', 'Goa'], ['31', 'Lakshadweep'], ['32', 'Kerala'],
+  ['33', 'Tamil Nadu'], ['34', 'Puducherry'], ['35', 'Andaman & Nicobar Islands'], ['36', 'Telangana'],
+  ['37', 'Andhra Pradesh'], ['38', 'Ladakh'],
+];
+
+// Standard 15-char GSTIN format.
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
 export default function BillingPosPage() {
   const [items, setItems] = useState<Item[]>([]);
@@ -83,10 +102,11 @@ export default function BillingPosPage() {
   // Receipt modal state
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [lastInvoice, setLastInvoice] = useState<any>(null);
-  const [printerWidth, setPrinterWidth] = useState<'3inch' | '2inch'>('3inch');
+  const [printerWidth, setPrinterWidth] = useState<'3inch' | '2inch' | 'a4'>('a4');
 
   const [soundActive, setSoundActive] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const navigate = useNavigate();
   const [checkoutKey, setCheckoutKey] = useState('');
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
@@ -146,34 +166,75 @@ export default function BillingPosPage() {
     return matchesCat && matchesQuery && item.isActive;
   });
 
-  // Deterministic Line Math (GST, Tax Inclusive / Exclusive)
-  const recalculateCartItem = (item: Item, quantity: number, discountAmount: number): CartItem => {
+  // Supplier (shop) state code, persisted at login — needed to decide intra- vs inter-state GST.
+  const shopStateCode = React.useMemo(() => {
+    try {
+      return (JSON.parse(localStorage.getItem('billpro_shop') || '{}').stateCode as string) || '';
+    } catch {
+      return '';
+    }
+  }, []);
+
+  // Inter-state when the selected customer's state differs from the shop's. Walk-in (no customer)
+  // defaults to intra-state, matching the backend's GstService.isInterstate.
+  const isInterstate = React.useMemo(() => {
+    const cust = customers.find((c) => c.id === selectedCustomerId);
+    const custState = cust?.stateCode?.trim();
+    if (!custState || !shopStateCode) return false;
+    return custState !== shopStateCode.trim();
+  }, [customers, selectedCustomerId, shopStateCode]);
+
+  // Deterministic Line Math — mirrors backend GstService.calculateLine exactly (intra/inter-state
+  // split, cess, tax-inclusive back-calc) so the on-screen breakup never drifts from what is stored.
+  const recalculateCartItem = (
+    item: Item,
+    quantity: number,
+    discountAmount: number,
+    interstate: boolean
+  ): CartItem => {
+    const round = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
     const unitPrice = Number(item.sellingPrice);
-    const grossAmount = unitPrice * quantity;
+    const grossAmount = round(unitPrice * quantity);
     const net = Math.max(0, grossAmount - discountAmount);
 
+    const rate = Number(item.gstRate) || 0;
+    const cessRate = Number(item.cessRate) || 0;
+    const effectiveTotalRate = rate + cessRate;
+
     let taxableAmount: number;
-    let totalTax: number;
     let cgstAmount = 0;
     let sgstAmount = 0;
-    const igstAmount = 0;
-    const cessAmount = 0;
-
-    const rate = Number(item.gstRate) || 0;
+    let igstAmount = 0;
+    let cessAmount = 0;
 
     if (item.isTaxInclusive) {
-      taxableAmount = Math.round((net / (1 + rate / 100) + Number.EPSILON) * 100) / 100;
-      totalTax = Math.round((net - taxableAmount + Number.EPSILON) * 100) / 100;
-      cgstAmount = Math.round((totalTax / 2 + Number.EPSILON) * 100) / 100;
-      sgstAmount = Math.round((totalTax - cgstAmount + Number.EPSILON) * 100) / 100;
+      taxableAmount = round(net / (1 + effectiveTotalRate / 100));
+      const totalTaxPlusCess = round(net - taxableAmount);
+      if (effectiveTotalRate > 0) {
+        const totalGst = round(totalTaxPlusCess * (rate / effectiveTotalRate));
+        cessAmount = round(totalTaxPlusCess - totalGst);
+        if (interstate) {
+          igstAmount = totalGst;
+        } else {
+          cgstAmount = round(totalGst / 2);
+          sgstAmount = round(totalGst - cgstAmount);
+        }
+      }
     } else {
-      taxableAmount = net;
-      totalTax = Math.round((taxableAmount * (rate / 100) + Number.EPSILON) * 100) / 100;
-      cgstAmount = Math.round((totalTax / 2 + Number.EPSILON) * 100) / 100;
-      sgstAmount = Math.round((totalTax - cgstAmount + Number.EPSILON) * 100) / 100;
+      taxableAmount = round(net);
+      if (rate > 0) {
+        if (interstate) {
+          igstAmount = round(taxableAmount * (rate / 100));
+        } else {
+          cgstAmount = round(taxableAmount * (rate / 2 / 100));
+          sgstAmount = round(taxableAmount * (rate / 2 / 100));
+        }
+      }
+      if (cessRate > 0) cessAmount = round(taxableAmount * (cessRate / 100));
     }
 
-    const lineTotal = Math.round((taxableAmount + totalTax + Number.EPSILON) * 100) / 100;
+    const totalTax = round(cgstAmount + sgstAmount + igstAmount + cessAmount);
+    const lineTotal = round(taxableAmount + totalTax);
 
     return {
       item,
@@ -191,6 +252,14 @@ export default function BillingPosPage() {
     };
   };
 
+  // Re-split existing cart lines when the intra/inter-state status flips (e.g. customer changed).
+  useEffect(() => {
+    setCart((prev) =>
+      prev.map((ci) => recalculateCartItem(ci.item, ci.quantity, ci.discountAmount, isInterstate))
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInterstate]);
+
   // Cart operations
   const addToCart = (item: Item) => {
     posAudio.playScanBeep();
@@ -198,10 +267,12 @@ export default function BillingPosPage() {
       const existing = prev.find((ci) => ci.item.id === item.id);
       if (existing) {
         return prev.map((ci) =>
-          ci.item.id === item.id ? recalculateCartItem(item, ci.quantity + 1, ci.discountAmount) : ci
+          ci.item.id === item.id
+            ? recalculateCartItem(item, ci.quantity + 1, ci.discountAmount, isInterstate)
+            : ci
         );
       }
-      return [...prev, recalculateCartItem(item, 1, 0)];
+      return [...prev, recalculateCartItem(item, 1, 0, isInterstate)];
     });
   };
 
@@ -211,13 +282,17 @@ export default function BillingPosPage() {
       return;
     }
     setCart((prev) =>
-      prev.map((ci) => (ci.item.id === itemId ? recalculateCartItem(ci.item, newQty, ci.discountAmount) : ci))
+      prev.map((ci) =>
+        ci.item.id === itemId ? recalculateCartItem(ci.item, newQty, ci.discountAmount, isInterstate) : ci
+      )
     );
   };
 
   const updateDiscount = (itemId: string, discount: number) => {
     setCart((prev) =>
-      prev.map((ci) => (ci.item.id === itemId ? recalculateCartItem(ci.item, ci.quantity, discount) : ci))
+      prev.map((ci) =>
+        ci.item.id === itemId ? recalculateCartItem(ci.item, ci.quantity, discount, isInterstate) : ci
+      )
     );
   };
 
@@ -306,7 +381,12 @@ export default function BillingPosPage() {
     );
   };
 
-  const totalAllocated = splitPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+  // CREDIT ("Udhaar") is not money collected — it is the balance left on the customer's account,
+  // so it never reduces the amount still due (which in turn forces a registered customer to be selected).
+  const totalAllocated = splitPayments.reduce(
+    (sum, p) => sum + (p.method === 'CREDIT' ? 0 : Number(p.amount)),
+    0
+  );
   const remainingBalance = Math.max(0, roundedTotal - totalAllocated);
 
   // Global Keyboard Shortcuts (F2 Search, F8 Barcode, F4 Hold, F9 Pay, Escape Close)
@@ -344,12 +424,25 @@ export default function BillingPosPage() {
       alert('Customer name is required');
       return;
     }
+    const gstin = newCustGstin.trim().toUpperCase();
+    if (gstin) {
+      if (!GSTIN_REGEX.test(gstin)) {
+        posAudio.playErrorBuzz();
+        alert('Invalid GSTIN format. Expected 15 characters, e.g. 27AAAAA0000A1Z5.');
+        return;
+      }
+      if (gstin.slice(0, 2) !== newCustStateCode) {
+        posAudio.playErrorBuzz();
+        alert(`GSTIN starts with ${gstin.slice(0, 2)} but the selected state code is ${newCustStateCode}.`);
+        return;
+      }
+    }
     setIsSavingCustomer(true);
     try {
       const created = await api.post('/parties/customers', {
         name: newCustName.trim(),
         phone: newCustPhone.trim() || undefined,
-        gstin: newCustGstin.trim() || undefined,
+        gstin: gstin || undefined,
         stateCode: newCustStateCode,
       });
 
@@ -390,7 +483,8 @@ export default function BillingPosPage() {
         discountAmount: ci.discountAmount,
       })),
       payments: splitPayments
-        .filter((p) => p.amount > 0)
+        // Drop CREDIT and zero tenders — the unpaid remainder is booked to the customer ledger server-side.
+        .filter((p) => p.amount > 0 && p.method !== 'CREDIT')
         .map((p) => ({
           paymentMethod: p.method,
           amount: p.amount,
@@ -529,6 +623,24 @@ export default function BillingPosPage() {
 
           {/* Product Items Grid (scrolls; header above stays fixed) */}
           <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+            {filteredItems.length === 0 ? (
+              <div className="h-full min-h-[260px] flex flex-col items-center justify-center text-center px-6 py-10">
+                <div className="w-16 h-16 rounded-2xl bg-brand/10 text-brand flex items-center justify-center mb-4">
+                  <PackageOpen className="w-8 h-8" />
+                </div>
+                <h3 className="font-bold text-fg text-base">
+                  {items.length === 0 ? 'No items yet' : 'No matching items'}
+                </h3>
+                <p className="text-sm text-fg-subtle mt-1 max-w-xs">
+                  {items.length === 0
+                    ? 'Add your first product to start billing and tracking stock.'
+                    : 'Try a different search or category, or add a new item.'}
+                </p>
+                <Button className="mt-4" onClick={() => navigate('/items')}>
+                  <Plus className="w-4 h-4 mr-1" /> Add Item
+                </Button>
+              </div>
+            ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
               {filteredItems.map((item) => {
                 const stockNum = Number(item.currentStock);
@@ -649,6 +761,7 @@ export default function BillingPosPage() {
                 );
               })}
             </div>
+            )}
           </div>
         </div>
 
@@ -802,7 +915,7 @@ export default function BillingPosPage() {
               <span>{formatCurrency(totalTaxable)}</span>
             </div>
             <div className="flex justify-between text-xs text-fg-subtle">
-              <span>GST (CGST + SGST)</span>
+              <span>GST ({isInterstate ? 'IGST' : 'CGST + SGST'})</span>
               <span>{formatCurrency(totalTax)}</span>
             </div>
             {roundOff !== 0 && (
@@ -865,13 +978,11 @@ export default function BillingPosPage() {
                 onChange={(e) => setNewCustStateCode(e.target.value)}
                 className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-xs text-fg focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                <option value="27">27 - Maharashtra</option>
-                <option value="24">24 - Gujarat</option>
-                <option value="29">29 - Karnataka</option>
-                <option value="07">07 - Delhi</option>
-                <option value="33">33 - Tamil Nadu</option>
-                <option value="09">09 - Uttar Pradesh</option>
-                <option value="19">19 - West Bengal</option>
+                {INDIAN_STATE_CODES.map(([code, name]) => (
+                  <option key={code} value={code}>
+                    {code} - {name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -1043,7 +1154,7 @@ export default function BillingPosPage() {
         isOpen={isReceiptModalOpen}
         onClose={() => setIsReceiptModalOpen(false)}
         title="Invoice Issued Successfully"
-        maxWidth="md"
+        maxWidth={printerWidth === 'a4' ? '4xl' : 'md'}
       >
         <div className="space-y-4">
           <div className="flex justify-center gap-2 pb-2 border-b border-border no-print">
@@ -1063,9 +1174,18 @@ export default function BillingPosPage() {
             >
               2-Inch Thermal (58mm)
             </button>
+            <button
+              onClick={() => setPrinterWidth('a4')}
+              className={`px-3 py-1 text-xs rounded-lg font-medium ${
+                printerWidth === 'a4' ? 'bg-emerald-600 text-white' : 'bg-surface-2 text-fg-subtle'
+              }`}
+            >
+              A4 Invoice
+            </button>
           </div>
 
-          {/* Physical Receipt Container */}
+          {/* Physical Receipt Container (thermal) */}
+          {printerWidth !== 'a4' && (
           <div
             className={`mx-auto bg-white text-black font-mono text-[11px] p-4 rounded shadow-lg leading-tight printable-receipt ${
               printerWidth === '2inch' ? 'w-56 text-[10px]' : 'w-72'
@@ -1125,6 +1245,114 @@ export default function BillingPosPage() {
               <p className="text-[10px] font-bold mt-2">*** THANK YOU VISIT AGAIN ***</p>
             </div>
           </div>
+          )}
+
+          {/* A4 Invoice (full-page tax invoice) */}
+          {printerWidth === 'a4' && (() => {
+            const shop = JSON.parse(localStorage.getItem('billpro_shop') || '{}');
+            const shopName = shop.businessName || shop.name || 'Bill Pro Retail Store';
+            const inv = lastInvoice || {};
+            const lines = inv.lines || [];
+            const taxable = inv.totalTaxable ?? inv.taxableAmount ?? inv.subtotal;
+            const tax = inv.totalTax ?? inv.taxAmount;
+            return (
+              <div className="mx-auto max-h-[60vh] overflow-auto">
+                <div className="printable-a4 mx-auto bg-white text-black text-[12px] shadow-lg" style={{ width: '210mm', minHeight: '297mm', padding: '14mm' }}>
+                  {/* Header */}
+                  <div className="flex justify-between items-start border-b-2 border-black pb-3">
+                    <div>
+                      <h2 className="text-xl font-bold uppercase tracking-tight">{shopName}</h2>
+                      {shop.address && <p className="text-[11px]">{shop.address}</p>}
+                      {shop.gstin && <p className="text-[11px]">GSTIN: {shop.gstin}</p>}
+                      {shop.state && (
+                        <p className="text-[11px]">
+                          State: {shop.state}{shop.stateCode ? ` (${shop.stateCode})` : ''}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <h3 className="text-lg font-bold uppercase">Tax Invoice</h3>
+                      <p className="text-[11px]">Invoice No: <span className="font-semibold">{inv.invoiceNumber || '—'}</span></p>
+                      <p className="text-[11px]">Date: {inv.invoiceDate || new Date().toLocaleDateString('en-IN')}</p>
+                    </div>
+                  </div>
+
+                  {/* Bill To */}
+                  <div className="py-3 border-b border-black">
+                    <p className="text-[11px] font-bold uppercase text-gray-600">Bill To</p>
+                    <p className="font-semibold">{inv.customer?.name || 'Walk-in Retail'}</p>
+                    {inv.customer?.phone && <p className="text-[11px]">Phone: {inv.customer.phone}</p>}
+                    {inv.customer?.gstin && <p className="text-[11px]">GSTIN: {inv.customer.gstin}</p>}
+                  </div>
+
+                  {/* Line items table */}
+                  <table className="w-full border-collapse mt-3 text-[11px]">
+                    <thead>
+                      <tr className="bg-gray-100 border-y border-black">
+                        <th className="text-left py-1.5 px-2 border-r border-gray-300 w-8">#</th>
+                        <th className="text-left py-1.5 px-2 border-r border-gray-300">Item</th>
+                        <th className="text-right py-1.5 px-2 border-r border-gray-300">Qty</th>
+                        <th className="text-right py-1.5 px-2 border-r border-gray-300">Rate</th>
+                        <th className="text-right py-1.5 px-2">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lines.map((line: any, idx: number) => (
+                        <tr key={idx} className="border-b border-gray-200">
+                          <td className="py-1.5 px-2 border-r border-gray-200">{idx + 1}</td>
+                          <td className="py-1.5 px-2 border-r border-gray-200">{line.itemName}</td>
+                          <td className="py-1.5 px-2 border-r border-gray-200 text-right">{Number(line.quantity).toFixed(2)}</td>
+                          <td className="py-1.5 px-2 border-r border-gray-200 text-right">{formatCurrency(line.unitPrice)}</td>
+                          <td className="py-1.5 px-2 text-right">{formatCurrency(line.lineTotal)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {/* Totals */}
+                  <div className="flex justify-end mt-4">
+                    <div className="w-64 text-[12px] space-y-1">
+                      {taxable != null && (
+                        <div className="flex justify-between">
+                          <span>Taxable Amount</span>
+                          <span>{formatCurrency(taxable)}</span>
+                        </div>
+                      )}
+                      {tax != null && (
+                        <div className="flex justify-between">
+                          <span>GST</span>
+                          <span>{formatCurrency(tax)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-bold text-[14px] border-t border-black pt-1 mt-1">
+                        <span>Grand Total</span>
+                        <span>{formatCurrency(inv.totalAmount)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Paid</span>
+                        <span>{formatCurrency(inv.paidAmount ?? inv.totalAmount)}</span>
+                      </div>
+                      {inv.balanceAmount > 0 && (
+                        <div className="flex justify-between text-red-600 font-semibold">
+                          <span>Balance Due</span>
+                          <span>{formatCurrency(inv.balanceAmount)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="mt-10 flex justify-between items-end">
+                    <p className="text-[10px] text-gray-500">This is a computer-generated invoice.</p>
+                    <div className="text-center">
+                      <div className="h-12" />
+                      <p className="text-[11px] border-t border-black pt-1 px-6">Authorised Signatory</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Action Buttons */}
           <div className="flex gap-2 pt-2 no-print">

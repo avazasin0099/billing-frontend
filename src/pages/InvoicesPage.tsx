@@ -20,6 +20,18 @@ export default function InvoicesPage() {
   const [returnMode, setReturnMode] = useState<'CASH' | 'LEDGER_CREDIT'>('CASH');
   const [returnNotes, setReturnNotes] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  // The list endpoint omits line items; fetch the full invoice (with lines) by id.
+  const fetchFullInvoice = async (inv: Invoice): Promise<Invoice> => {
+    try {
+      const full = await api.get(`/invoices/${inv.id}`);
+      return full || inv;
+    } catch (err) {
+      console.error('Failed to load invoice detail:', err);
+      return inv;
+    }
+  };
 
   const fetchInvoices = async () => {
     try {
@@ -42,14 +54,26 @@ export default function InvoicesPage() {
     fetchInvoices();
   };
 
-  const handleOpenReturnModal = (inv: Invoice) => {
-    setSelectedInvoice(inv);
+  const handleViewInvoice = async (inv: Invoice) => {
+    setSelectedInvoice(inv); // show header immediately
+    setIsDetailModalOpen(true);
+    setDetailLoading(true);
+    const full = await fetchFullInvoice(inv);
+    setSelectedInvoice(full);
+    setDetailLoading(false);
+  };
+
+  const handleOpenReturnModal = async (inv: Invoice) => {
+    setIsReturnModalOpen(true);
+    setDetailLoading(true);
+    const full = await fetchFullInvoice(inv);
+    setSelectedInvoice(full);
     const initialQty: Record<string, number> = {};
-    inv.lines?.forEach((l) => {
+    full.lines?.forEach((l) => {
       initialQty[l.itemId] = 0;
     });
     setReturnQty(initialQty);
-    setIsReturnModalOpen(true);
+    setDetailLoading(false);
   };
 
   const handleProcessReturn = async () => {
@@ -165,10 +189,7 @@ export default function InvoicesPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          setSelectedInvoice(inv);
-                          setIsDetailModalOpen(true);
-                        }}
+                        onClick={() => handleViewInvoice(inv)}
                         title="View Line Items"
                       >
                         <Eye className="w-4 h-4" />
@@ -221,15 +242,29 @@ export default function InvoicesPage() {
               </Tr>
             </Thead>
             <Tbody>
-              {selectedInvoice?.lines?.map((line) => (
-                <Tr key={line.id}>
-                  <Td className="font-medium text-fg">{line.itemName}</Td>
-                  <Td>{line.quantity}</Td>
-                  <Td>{formatCurrency(line.unitPrice)}</Td>
-                  <Td>{line.gstRate}%</Td>
-                  <Td className="text-right font-bold text-fg">{formatCurrency(line.lineTotal)}</Td>
+              {detailLoading ? (
+                <Tr>
+                  <Td colSpan={5} className="text-center text-fg-subtle py-6">
+                    Loading items…
+                  </Td>
                 </Tr>
-              ))}
+              ) : selectedInvoice?.lines?.length ? (
+                selectedInvoice.lines.map((line) => (
+                  <Tr key={line.id}>
+                    <Td className="font-medium text-fg">{line.itemName}</Td>
+                    <Td>{Number(line.quantity).toFixed(2)}</Td>
+                    <Td>{formatCurrency(line.unitPrice)}</Td>
+                    <Td>{line.gstRate}%</Td>
+                    <Td className="text-right font-bold text-fg">{formatCurrency(line.lineTotal)}</Td>
+                  </Tr>
+                ))
+              ) : (
+                <Tr>
+                  <Td colSpan={5} className="text-center text-fg-subtle py-6">
+                    No items found for this invoice.
+                  </Td>
+                </Tr>
+              )}
             </Tbody>
           </Table>
 
