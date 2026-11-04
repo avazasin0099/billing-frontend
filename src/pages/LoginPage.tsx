@@ -8,7 +8,7 @@ import { api } from '@/services/api-client';
 export default function LoginPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'password' | 'pin'>('password');
-  const [email, setEmail] = useState('admin@billpro.local');
+  const [identifier, setIdentifier] = useState('admin@billpro.local');
   const [password, setPassword] = useState('Admin@1234');
   const [pin, setPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -20,7 +20,7 @@ export default function LoginPage() {
     setErrorMessage('');
 
     try {
-      const data = await api.post('/auth/login', { email, password });
+      const data = await api.post('/auth/login', { identifier, password });
       if (data.tokens?.accessToken) {
         localStorage.setItem('billpro_token', data.tokens.accessToken);
         localStorage.setItem('billpro_refresh_token', data.tokens.refreshToken);
@@ -71,15 +71,15 @@ export default function LoginPage() {
 
   const handleQuickFill = (role: 'owner' | 'manager' | 'cashier') => {
     if (role === 'owner') {
-      setEmail('admin@billpro.local');
+      setIdentifier('admin@billpro.local');
       setPassword('Admin@1234');
       setPin('1234');
     } else if (role === 'manager') {
-      setEmail('manager@billpro.local');
+      setIdentifier('manager@billpro.local');
       setPassword('Manager@1234');
       setPin('2345');
     } else {
-      setEmail('cashier@billpro.local');
+      setIdentifier('cashier@billpro.local');
       setPassword('Cashier@1234');
       setPin('3456');
     }
@@ -142,13 +142,13 @@ export default function LoginPage() {
           {activeTab === 'password' ? (
             <form onSubmit={handlePasswordLogin} className="space-y-4">
               <Input
-                label="Email Address"
-                type="email"
+                label="Email or Phone"
+                type="text"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 icon={<Mail className="w-4 h-4" />}
-                placeholder="you@shop.com"
+                placeholder="you@shop.com or 9820011223"
               />
 
               <Input

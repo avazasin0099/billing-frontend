@@ -67,7 +67,7 @@ export default function SignupPage() {
       const data = await api.post('/auth/signup', {
         businessName,
         name,
-        email,
+        email: email || undefined,
         phone,
         password,
         gstin: gstin || undefined,
@@ -139,9 +139,8 @@ export default function SignupPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
-                label="Email"
+                label="Email (Optional)"
                 type="email"
-                required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 icon={<Mail className="w-4 h-4" />}

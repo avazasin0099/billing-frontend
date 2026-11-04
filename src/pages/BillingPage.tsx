@@ -21,7 +21,9 @@ import {
   AlertCircle,
   Sparkles,
   ArrowRight,
+  PackageOpen,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, Badge, Input } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -100,10 +102,11 @@ export default function BillingPosPage() {
   // Receipt modal state
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [lastInvoice, setLastInvoice] = useState<any>(null);
-  const [printerWidth, setPrinterWidth] = useState<'3inch' | '2inch' | 'a4'>('3inch');
+  const [printerWidth, setPrinterWidth] = useState<'3inch' | '2inch' | 'a4'>('a4');
 
   const [soundActive, setSoundActive] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const navigate = useNavigate();
   const [checkoutKey, setCheckoutKey] = useState('');
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
@@ -620,6 +623,24 @@ export default function BillingPosPage() {
 
           {/* Product Items Grid (scrolls; header above stays fixed) */}
           <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+            {filteredItems.length === 0 ? (
+              <div className="h-full min-h-[260px] flex flex-col items-center justify-center text-center px-6 py-10">
+                <div className="w-16 h-16 rounded-2xl bg-brand/10 text-brand flex items-center justify-center mb-4">
+                  <PackageOpen className="w-8 h-8" />
+                </div>
+                <h3 className="font-bold text-fg text-base">
+                  {items.length === 0 ? 'No items yet' : 'No matching items'}
+                </h3>
+                <p className="text-sm text-fg-subtle mt-1 max-w-xs">
+                  {items.length === 0
+                    ? 'Add your first product to start billing and tracking stock.'
+                    : 'Try a different search or category, or add a new item.'}
+                </p>
+                <Button className="mt-4" onClick={() => navigate('/items')}>
+                  <Plus className="w-4 h-4 mr-1" /> Add Item
+                </Button>
+              </div>
+            ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
               {filteredItems.map((item) => {
                 const stockNum = Number(item.currentStock);
@@ -740,6 +761,7 @@ export default function BillingPosPage() {
                 );
               })}
             </div>
+            )}
           </div>
         </div>
 
@@ -1132,7 +1154,7 @@ export default function BillingPosPage() {
         isOpen={isReceiptModalOpen}
         onClose={() => setIsReceiptModalOpen(false)}
         title="Invoice Issued Successfully"
-        maxWidth="md"
+        maxWidth={printerWidth === 'a4' ? '4xl' : 'md'}
       >
         <div className="space-y-4">
           <div className="flex justify-center gap-2 pb-2 border-b border-border no-print">
@@ -1279,7 +1301,7 @@ export default function BillingPosPage() {
                         <tr key={idx} className="border-b border-gray-200">
                           <td className="py-1.5 px-2 border-r border-gray-200">{idx + 1}</td>
                           <td className="py-1.5 px-2 border-r border-gray-200">{line.itemName}</td>
-                          <td className="py-1.5 px-2 border-r border-gray-200 text-right">{line.quantity}</td>
+                          <td className="py-1.5 px-2 border-r border-gray-200 text-right">{Number(line.quantity).toFixed(2)}</td>
                           <td className="py-1.5 px-2 border-r border-gray-200 text-right">{formatCurrency(line.unitPrice)}</td>
                           <td className="py-1.5 px-2 text-right">{formatCurrency(line.lineTotal)}</td>
                         </tr>
