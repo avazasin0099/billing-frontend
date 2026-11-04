@@ -31,7 +31,7 @@ class ApiClient {
     return headers;
   }
 
-  private async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  private async request<T = any>(endpoint: string, options: RequestInit = {}, retried = false): Promise<T> {
     const baseUrl = getBaseUrl();
     const url = `${baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
@@ -46,8 +46,9 @@ class ApiClient {
     try {
       const response = await fetch(url, config);
 
-      if (response.status === 401 && typeof window !== 'undefined') {
-        // Try refresh token
+      if (response.status === 401 && typeof window !== 'undefined' && !retried) {
+        // Try refresh token (only once — `retried` prevents an infinite refresh/retry loop
+        // if the server keeps returning 401 after a seemingly successful refresh).
         const refreshToken = localStorage.getItem('billpro_refresh_token');
         if (refreshToken && endpoint !== '/auth/refresh' && endpoint !== '/auth/login') {
           try {
@@ -60,8 +61,8 @@ class ApiClient {
             if (refreshData.success && refreshData.data?.accessToken) {
               localStorage.setItem('billpro_token', refreshData.data.accessToken);
               localStorage.setItem('billpro_refresh_token', refreshData.data.refreshToken);
-              // Retry original request
-              return this.request<T>(endpoint, options);
+              // Retry original request exactly once.
+              return this.request<T>(endpoint, options, true);
             }
           } catch {
             localStorage.removeItem('billpro_token');

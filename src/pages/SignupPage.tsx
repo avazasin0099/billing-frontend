@@ -5,6 +5,47 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/card';
 import { api } from '@/services/api-client';
 
+// GST state codes for India (all states & union territories)
+const INDIAN_STATES: { code: string; name: string }[] = [
+  { code: '01', name: 'Jammu and Kashmir' },
+  { code: '02', name: 'Himachal Pradesh' },
+  { code: '03', name: 'Punjab' },
+  { code: '04', name: 'Chandigarh' },
+  { code: '05', name: 'Uttarakhand' },
+  { code: '06', name: 'Haryana' },
+  { code: '07', name: 'Delhi' },
+  { code: '08', name: 'Rajasthan' },
+  { code: '09', name: 'Uttar Pradesh' },
+  { code: '10', name: 'Bihar' },
+  { code: '11', name: 'Sikkim' },
+  { code: '12', name: 'Arunachal Pradesh' },
+  { code: '13', name: 'Nagaland' },
+  { code: '14', name: 'Manipur' },
+  { code: '15', name: 'Mizoram' },
+  { code: '16', name: 'Tripura' },
+  { code: '17', name: 'Meghalaya' },
+  { code: '18', name: 'Assam' },
+  { code: '19', name: 'West Bengal' },
+  { code: '20', name: 'Jharkhand' },
+  { code: '21', name: 'Odisha' },
+  { code: '22', name: 'Chhattisgarh' },
+  { code: '23', name: 'Madhya Pradesh' },
+  { code: '24', name: 'Gujarat' },
+  { code: '26', name: 'Dadra and Nagar Haveli and Daman and Diu' },
+  { code: '27', name: 'Maharashtra' },
+  { code: '29', name: 'Karnataka' },
+  { code: '30', name: 'Goa' },
+  { code: '31', name: 'Lakshadweep' },
+  { code: '32', name: 'Kerala' },
+  { code: '33', name: 'Tamil Nadu' },
+  { code: '34', name: 'Puducherry' },
+  { code: '35', name: 'Andaman and Nicobar Islands' },
+  { code: '36', name: 'Telangana' },
+  { code: '37', name: 'Andhra Pradesh' },
+  { code: '38', name: 'Ladakh' },
+  { code: '97', name: 'Other Territory' },
+];
+
 export default function SignupPage() {
   const navigate = useNavigate();
   const [businessName, setBusinessName] = useState('');
@@ -30,7 +71,7 @@ export default function SignupPage() {
         phone,
         password,
         gstin: gstin || undefined,
-        state: 'Maharashtra',
+        state: INDIAN_STATES.find((s) => s.code === stateCode)?.name || '',
         stateCode,
       });
 
@@ -126,19 +167,17 @@ export default function SignupPage() {
                 placeholder="27AAPFU0939F1ZV"
               />
               <div>
-                <label className="block text-xs font-medium text-fg-muted mb-1.5">State Code</label>
+                <label className="block text-xs font-medium text-fg-muted mb-1.5">State / UT (GST Code)</label>
                 <select
                   value={stateCode}
                   onChange={(e) => setStateCode(e.target.value)}
                   className="w-full bg-surface-2 border border-border rounded-lg px-3.5 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-ring"
                 >
-                  <option value="27">27 - Maharashtra</option>
-                  <option value="29">29 - Karnataka</option>
-                  <option value="07">07 - Delhi</option>
-                  <option value="24">24 - Gujarat</option>
-                  <option value="33">33 - Tamil Nadu</option>
-                  <option value="36">36 - Telangana</option>
-                  <option value="09">09 - Uttar Pradesh</option>
+                  {INDIAN_STATES.map((s) => (
+                    <option key={s.code} value={s.code}>
+                      {s.code} - {s.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
