@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Pencil, Barcode, Power } from 'lucide-react';
+import { Search, Plus, Pencil, Barcode, Power, Check, X } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, Badge, Input } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,38 @@ export default function ItemsPage() {
   const [openingStock, setOpeningStock] = useState<number>(10);
   const [reorderLevel, setReorderLevel] = useState<number>(5);
 
+  // Managed categories (from the backend), plus inline "add new category" state.
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+
+  const fetchCategories = async () => {
+    try {
+      const data = await api.get('/categories');
+      setCategories(data || []);
+    } catch (err) {
+      console.error('Failed to load categories:', err);
+    }
+  };
+
+  const handleAddCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    setIsSavingCategory(true);
+    try {
+      const created = await api.post('/categories', { name });
+      await fetchCategories();
+      setCategory(created?.name || name);
+      setNewCategoryName('');
+      setIsAddingCategory(false);
+    } catch (err: any) {
+      alert(`Failed to add category: ${err.message}`);
+    } finally {
+      setIsSavingCategory(false);
+    }
+  };
+
   const fetchItems = async () => {
     try {
       setIsLoading(true);
@@ -46,6 +78,7 @@ export default function ItemsPage() {
 
   useEffect(() => {
     fetchItems();
+    fetchCategories();
   }, []);
 
   const resetForm = () => {
@@ -53,13 +86,15 @@ export default function ItemsPage() {
     setSku('');
     setBarcode('');
     setHsnCode('');
-    setCategory('Grocery Staples');
+    setCategory(categories[0]?.name || 'General');
     setPurchasePrice('');
     setSellingPrice('');
     setMrp('');
     setGstRate(0);
     setOpeningStock(10);
     setReorderLevel(5);
+    setIsAddingCategory(false);
+    setNewCategoryName('');
   };
 
   const openAddModal = () => {
@@ -272,6 +307,87 @@ export default function ItemsPage() {
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Parle-G Gold Biscuits 1kg"
           />
+
+          {/* Category — managed list + inline add new */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-medium text-fg-muted">Category</label>
+              {!isAddingCategory && (
+                <button
+                  type="button"
+                  onClick={() => setIsAddingCategory(true)}
+                  className="text-[11px] font-semibold text-brand hover:underline inline-flex items-center gap-0.5"
+                >
+                  <Plus className="w-3 h-3" /> Add new category
+                </button>
+              )}
+            </div>
+
+            {isAddingCategory ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  autoFocus
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddCategory();
+                    }
+                    if (e.key === 'Escape') {
+                      setIsAddingCategory(false);
+                      setNewCategoryName('');
+                    }
+                  }}
+                  placeholder="New category name"
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={handleAddCategory}
+                  isLoading={isSavingCategory}
+                  title="Save category"
+                >
+                  <Check className="w-4 h-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setIsAddingCategory(false);
+                    setNewCategoryName('');
+                  }}
+                  title="Cancel"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {/* Keep a legacy/unlisted category selectable when editing an older item */}
+                {category && !categories.some((c) => c.name === category) && (
+                  <option value={category}>{category}</option>
+                )}
+                {categories.length === 0 && !category && (
+                  <option value="" disabled>
+                    No categories yet — add one →
+                  </option>
+                )}
+                {categories.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <Input
