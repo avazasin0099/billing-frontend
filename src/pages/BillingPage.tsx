@@ -22,6 +22,8 @@ import {
   Sparkles,
   ArrowRight,
   PackageOpen,
+  Pencil,
+  Check,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -79,6 +81,9 @@ export default function BillingPosPage() {
 
   // Cart state
   const [cart, setCart] = useState<CartItem[]>([]);
+  // Inline per-line price editing (for the current bill only)
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [priceDraft, setPriceDraft] = useState('');
   const [heldCarts, setHeldCarts] = useState<{ id: string; name: string; cart: CartItem[]; customerId?: string }[]>([]);
 
   // Customer state
@@ -190,10 +195,16 @@ export default function BillingPosPage() {
     item: Item,
     quantity: number,
     discountAmount: number,
-    interstate: boolean
+    interstate: boolean,
+    // Per-bill price override. When provided, this unit price is used for this line instead of the
+    // catalogue sellingPrice — lets the cashier edit the rate for a single bill without touching the item master.
+    unitPriceOverride?: number
   ): CartItem => {
     const round = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
-    const unitPrice = Number(item.sellingPrice);
+    const unitPrice =
+      unitPriceOverride != null && Number.isFinite(unitPriceOverride) && unitPriceOverride >= 0
+        ? round(unitPriceOverride)
+        : Number(item.sellingPrice);
     const grossAmount = round(unitPrice * quantity);
     const net = Math.max(0, grossAmount - discountAmount);
 
@@ -255,7 +266,7 @@ export default function BillingPosPage() {
   // Re-split existing cart lines when the intra/inter-state status flips (e.g. customer changed).
   useEffect(() => {
     setCart((prev) =>
-      prev.map((ci) => recalculateCartItem(ci.item, ci.quantity, ci.discountAmount, isInterstate))
+      prev.map((ci) => recalculateCartItem(ci.item, ci.quantity, ci.discountAmount, isInterstate, ci.unitPrice))
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isInterstate]);
@@ -283,7 +294,7 @@ export default function BillingPosPage() {
     }
     setCart((prev) =>
       prev.map((ci) =>
-        ci.item.id === itemId ? recalculateCartItem(ci.item, newQty, ci.discountAmount, isInterstate) : ci
+        ci.item.id === itemId ? recalculateCartItem(ci.item, newQty, ci.discountAmount, isInterstate, ci.unitPrice) : ci
       )
     );
   };
@@ -291,9 +302,37 @@ export default function BillingPosPage() {
   const updateDiscount = (itemId: string, discount: number) => {
     setCart((prev) =>
       prev.map((ci) =>
-        ci.item.id === itemId ? recalculateCartItem(ci.item, ci.quantity, discount, isInterstate) : ci
+        ci.item.id === itemId ? recalculateCartItem(ci.item, ci.quantity, discount, isInterstate, ci.unitPrice) : ci
       )
     );
+  };
+
+  // Edit the unit price for a single line of the current bill only. The catalogue sellingPrice is
+  // left untouched — a blank/invalid entry falls back to the catalogue rate.
+  const updateUnitPrice = (itemId: string, newPrice: number) => {
+    setCart((prev) =>
+      prev.map((ci) =>
+        ci.item.id === itemId
+          ? recalculateCartItem(ci.item, ci.quantity, ci.discountAmount, isInterstate, newPrice)
+          : ci
+      )
+    );
+  };
+
+  // Open the inline price editor for a line, seeding the draft with the current unit price.
+  const beginEditPrice = (ci: CartItem) => {
+    setEditingPriceId(ci.item.id);
+    setPriceDraft(String(ci.unitPrice));
+  };
+
+  // Commit the edited price (blank/invalid → revert to catalogue sellingPrice) and close the editor.
+  const commitEditPrice = (itemId: string) => {
+    const parsed = parseFloat(priceDraft);
+    const item = cart.find((ci) => ci.item.id === itemId)?.item;
+    const fallback = item ? Number(item.sellingPrice) : 0;
+    updateUnitPrice(itemId, Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback);
+    setEditingPriceId(null);
+    setPriceDraft('');
   };
 
   const removeFromCart = (itemId: string) => {
@@ -869,7 +908,52 @@ export default function BillingPosPage() {
                   <div className="flex-1 min-w-0">
                     <h5 className="text-xs font-semibold text-fg truncate">{ci.item.name}</h5>
                     <div className="flex items-center gap-2 text-[10px] text-fg-subtle mt-0.5">
-                      <span>{formatCurrency(ci.unitPrice)}</span>
+                      {editingPriceId === ci.item.id ? (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="text-fg-subtle">₹</span>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            autoFocus
+                            value={priceDraft}
+                            onChange={(e) => setPriceDraft(e.target.value)}
+                            onBlur={() => commitEditPrice(ci.item.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') commitEditPrice(ci.item.id);
+                              if (e.key === 'Escape') {
+                                setEditingPriceId(null);
+                                setPriceDraft('');
+                              }
+                            }}
+                            className="w-16 bg-surface border border-brand rounded px-1 py-0.5 text-[10px] text-fg font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                          />
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => commitEditPrice(ci.item.id)}
+                            className="p-0.5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 rounded"
+                            aria-label="Save price"
+                          >
+                            <Check className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => beginEditPrice(ci)}
+                          className="inline-flex items-center gap-1 hover:text-brand group/price"
+                          title="Edit price for this bill"
+                        >
+                          <span>{formatCurrency(ci.unitPrice)}</span>
+                          {ci.unitPrice !== Number(ci.item.sellingPrice) && (
+                            <span className="text-[9px] line-through text-fg-subtle/70">
+                              {formatCurrency(ci.item.sellingPrice)}
+                            </span>
+                          )}
+                          <Pencil className="w-2.5 h-2.5 opacity-50 group-hover/price:opacity-100" />
+                        </button>
+                      )}
                       <span>•</span>
                       <span className="text-brand">{ci.gstRate}% GST</span>
                       {ci.discountAmount > 0 && (
