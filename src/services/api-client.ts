@@ -1,14 +1,25 @@
 const getBaseUrl = (): string => {
-  const envUrl = import.meta.env.VITE_API_URL;
+  let envUrl = import.meta.env.VITE_API_URL?.trim();
+
+  if (envUrl) {
+    // If protocol is missing, ensure https:// is prepended so browsers don't treat it as a relative path
+    if (!envUrl.startsWith('http://') && !envUrl.startsWith('https://')) {
+      envUrl = `https://${envUrl}`;
+    }
+    // Strip trailing slashes
+    envUrl = envUrl.replace(/\/+$/, '');
+    // Ensure /api/v1 prefix is appended
+    if (!envUrl.endsWith('/api/v1')) {
+      envUrl = `${envUrl}/api/v1`;
+    }
+    return envUrl;
+  }
 
   if (typeof window !== 'undefined') {
-    if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
-      return envUrl;
-    }
     const host = window.location.hostname;
     return `http://${host}:5000/api/v1`;
   }
-  return envUrl || 'http://localhost:5000/api/v1';
+  return 'http://localhost:5000/api/v1';
 };
 
 class ApiClient {
