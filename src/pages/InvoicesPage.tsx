@@ -8,6 +8,7 @@ import { Table, Thead, Tbody, Tr, Th, Td, Modal } from '@/components/ui/modal';
 import { api } from '@/services/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Invoice } from '@/types';
+import { NumberInput } from '@/components/ui/number-input';
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -296,7 +297,7 @@ export default function InvoicesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-fg-subtle">Return:</span>
-                  <input
+                  <NumberInput
                     type="number"
                     min={0}
                     max={line.quantity}

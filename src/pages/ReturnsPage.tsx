@@ -19,6 +19,7 @@ import { api } from '@/services/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Invoice } from '@/types';
 import { posAudio } from '@/lib/sound';
+import { NumberInput } from '@/components/ui/number-input';
 
 export default function ReturnsPage() {
   const [invoiceNumberQuery, setInvoiceNumberQuery] = useState('');
@@ -281,7 +282,7 @@ export default function ReturnsPage() {
                                 >
                                   -
                                 </button>
-                                <input
+                                <NumberInput
                                   type="number"
                                   value={currentReturnQty}
                                   onChange={(e) =>

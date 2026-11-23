@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { api } from '@/services/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Supplier, Item, Purchase } from '@/types';
+import { NumberInput } from '@/components/ui/number-input';
 
 interface PurchaseItemRow {
   itemId: string;
@@ -435,7 +436,7 @@ export default function PurchasesPage() {
                   </div>
                   <div className="w-24">
                     <label className="block text-[10px] text-fg-subtle mb-0.5">Qty</label>
-                    <input
+                    <NumberInput
                       type="number"
                       min={1}
                       required
@@ -446,7 +447,7 @@ export default function PurchasesPage() {
                   </div>
                   <div className="w-28">
                     <label className="block text-[10px] text-fg-subtle mb-0.5">Unit Cost (₹)</label>
-                    <input
+                    <NumberInput
                       type="number"
                       step="0.01"
                       min={0}

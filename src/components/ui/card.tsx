@@ -1,5 +1,6 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
+import { NumberInput } from './number-input';
 
 export const Card: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   children,
@@ -73,6 +74,7 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, icon, className, ...props }, ref) => {
+    const InputTag = props.type === 'number' ? NumberInput : 'input';
     return (
       <div className="w-full">
         {label && (
@@ -86,7 +88,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
               {icon}
             </div>
           )}
-          <input
+          <InputTag
             ref={ref}
             className={cn(
               'w-full bg-surface border border-border rounded-lg px-3.5 py-2 text-sm text-fg placeholder-fg-subtle transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-50 disabled:bg-surface-2',

@@ -35,6 +35,7 @@ import { formatCurrency, cn } from '@/lib/utils';
 import { Item, CartItem, Customer, PaymentMethod } from '@/types';
 import { LocalDbService } from '@/offline/pending-operations';
 import { posAudio } from '@/lib/sound';
+import { NumberInput } from '@/components/ui/number-input';
 
 // Soft, deterministic colour swatch for the product thumbnail placeholder (used when an item
 // has no image). Light tint + readable accent, so it reads like a photo slot in both themes.
@@ -1192,7 +1193,7 @@ export default function BillingPosPage() {
                 <span className="text-xs font-bold text-brand w-24 px-2 py-1 bg-brand/10 rounded">
                   {p.method}
                 </span>
-                <input
+                <NumberInput
                   type="number"
                   value={p.amount}
                   onChange={(e) => handleUpdateSplitAmount(idx, Number(e.target.value))}
