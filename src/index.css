@@ -7,31 +7,83 @@
 /*  Values are space-separated RGB channels so Tailwind's             */
 /*  rgb(var(--x) / <alpha-value>) opacity utilities keep working.      */
 /* ------------------------------------------------------------------ */
+/*
+ * Brand palette: Black #000000 · Violet #7E38ED · White #FFFFFF · Lime #C6FF34
+ *
+ *   Neutrals  — pure (un-tinted) greys between black and white. Flat surfaces, 1px borders.
+ *   Primary   — Violet. The ONLY colour for actions, links, selection and focus.
+ *               White text on violet = 5.7:1; violet text on white = 5.7:1.
+ *   Highlight — Lime. Used for emphasis (brand mark, counters, active markers) and ALWAYS
+ *               paired with black text: black on lime = 17.8:1, but lime on white = 1.2:1,
+ *               so lime is never used as text/icon colour in light mode.
+ *   Dark mode — true black canvas. Violet text on black is only 3.7:1, so accent text/icons
+ *               switch to lime (17.8:1); violet stays the fill colour for buttons.
+ *   Status    — success (green), warning (amber), danger (red), info (sky). Meaning only,
+ *               always paired with an icon or text.
+ */
 @layer base {
   :root {
     color-scheme: light;
-    --canvas: 248 250 252;      /* page background        (slate-50)  */
-    --surface: 255 255 255;     /* cards / panels         (white)     */
-    --surface-2: 241 245 249;   /* insets / wells         (slate-100) */
-    --border: 226 232 240;      /* hairline borders       (slate-200) */
-    --fg: 15 23 42;             /* primary text           (slate-900) */
-    --fg-muted: 71 85 105;      /* secondary text         (slate-600) */
-    --fg-subtle: 100 116 139;   /* tertiary / hints       (slate-500) */
-    --brand: 5 150 105;         /* accent text & icons    (emerald-600) */
-    --ring: 16 185 129;         /* focus ring             (emerald-500) */
+    --canvas: 250 250 250;        /* page background            #FAFAFA */
+    --surface: 255 255 255;       /* cards / panels             White   */
+    --surface-2: 244 244 245;     /* insets, table head, tiles  #F4F4F5 */
+    --border: 228 228 231;        /* hairline borders           #E4E4E7 */
+    --border-strong: 212 212 216; /* inputs                     #D4D4D8 */
+    --fg: 0 0 0;                  /* primary text               Black   */
+    --fg-muted: 63 63 70;         /* secondary text             #3F3F46 */
+    --fg-subtle: 87 87 96;        /* tertiary / hints (≥ 4.5:1 on surface-2) */
+
+    --primary: 126 56 237;        /* fills: buttons, active     Violet #7E38ED */
+    --primary-hover: 106 36 217;  /*                            #6A24D9 */
+    --primary-fg: 255 255 255;    /* text on violet fills       White   */
+    --primary-soft: 243 237 254;  /* selected / active bg       #F3EDFE */
+    --accent: 126 56 237;         /* violet TEXT / ICON         #7E38ED */
+    --ring: 126 56 237;           /* focus ring                 Violet  */
+
+    --highlight: 198 255 52;      /* Lime #C6FF34 — fill only   */
+    --highlight-fg: 0 0 0;        /* text on lime               Black   */
+
+    --success: 21 128 61;         /* green-700 */
+    --success-soft: 240 253 244;  /* green-50  */
+    --warning: 180 83 9;          /* amber-700 */
+    --warning-soft: 255 251 235;  /* amber-50  */
+    --danger: 185 28 28;          /* red-700 (red-600 is 4.4:1 on red-50) */
+    --danger-hover: 153 27 27;    /* red-800   */
+    --danger-soft: 254 242 242;   /* red-50    */
+    --info: 3 105 161;            /* sky-700   */
+    --info-soft: 240 249 255;     /* sky-50    */
   }
 
   :root.dark {
     color-scheme: dark;
-    --canvas: 2 6 23;           /* slate-950 */
-    --surface: 15 23 42;        /* slate-900 */
-    --surface-2: 2 6 23;        /* slate-950 */
-    --border: 30 41 59;         /* slate-800 */
-    --fg: 241 245 249;          /* slate-100 */
-    --fg-muted: 148 163 184;    /* slate-400 */
-    --fg-subtle: 100 116 139;   /* slate-500 */
-    --brand: 52 211 153;        /* emerald-400 — brighter on dark */
-    --ring: 16 185 129;         /* emerald-500 */
+    --canvas: 0 0 0;              /* Black   */
+    --surface: 17 17 19;          /* #111113 */
+    --surface-2: 32 32 36;        /* #202024 */
+    --border: 39 39 42;           /* #27272A */
+    --border-strong: 63 63 70;    /* #3F3F46 */
+    --fg: 255 255 255;            /* White   */
+    --fg-muted: 179 179 186;      /* #B3B3BA */
+    --fg-subtle: 161 161 170;     /* #A1A1AA */
+
+    --primary: 126 56 237;        /* Violet fills — white text 5.7:1 */
+    --primary-hover: 106 36 217;  /* #6A24D9 — a lighter violet would drop white text below 4.5:1 */
+    --primary-fg: 255 255 255;
+    --primary-soft: 38 20 72;     /* #261448 deep violet */
+    --accent: 198 255 52;         /* Lime text/icons on black (violet text would be 3.7:1) */
+    --ring: 198 255 52;           /* Lime focus ring */
+
+    --highlight: 198 255 52;      /* Lime */
+    --highlight-fg: 0 0 0;
+
+    --success: 74 222 128;        /* green-400 */
+    --success-soft: 5 46 22;      /* green-950 */
+    --warning: 251 191 36;        /* amber-400 */
+    --warning-soft: 69 26 3;      /* amber-950 */
+    --danger: 248 113 113;        /* red-400 */
+    --danger-hover: 252 165 165;  /* red-300 */
+    --danger-soft: 69 10 10;      /* red-950 */
+    --info: 56 189 248;           /* sky-400 */
+    --info-soft: 8 47 73;         /* sky-950 */
   }
 
   body {
@@ -41,6 +93,46 @@
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+}
+
+@layer base {
+  /* One consistent, always-visible keyboard focus indicator (mouse clicks don't show it). */
+  :focus-visible {
+    outline: 2px solid rgb(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /* Keyboard shortcut hints, e.g. <kbd>F9</kbd> */
+  kbd {
+    display: inline-flex;
+    align-items: center;
+    min-width: 1.5rem;
+    justify-content: center;
+    padding: 0 0.375rem;
+    height: 1.25rem;
+    border-radius: 4px;
+    border: 1px solid rgb(var(--border-strong));
+    border-bottom-width: 2px;
+    background: rgb(var(--surface));
+    color: rgb(var(--fg-muted));
+    font: 600 0.75rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Custom scrollbars — themed */

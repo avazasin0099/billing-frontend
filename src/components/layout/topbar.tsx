@@ -1,52 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Wifi,
-  WifiOff,
-  RefreshCw,
-  LogOut,
-  ShieldCheck,
-  Store,
-  Sun,
-  Moon,
-} from 'lucide-react';
-import { Button } from '../ui/button';
+import { WifiOff, RefreshCw, LogOut, Store, Sun, Moon, Menu, ChevronDown, CloudUpload, UserRound } from 'lucide-react';
 import { SyncManager } from '@/offline/sync-manager';
 import { api } from '@/services/api-client';
 import { applyTheme, getStoredTheme, resolvesToDark, type Theme } from '@/lib/theme';
+import { useSession } from '@/lib/session';
+import { useOnlineStatus } from '@/lib/use-online';
+import { cn } from '@/lib/utils';
+import { IconButton } from '../ui/button';
+import { ConfirmDialog } from '../ui/confirm-dialog';
+import { toast } from '../ui/toast';
 
-export const Topbar: React.FC = () => {
+const ROLE_LABEL: Record<string, string> = { OWNER: 'Owner', MANAGER: 'Manager', CASHIER: 'Cashier' };
+
+export const Topbar: React.FC<{ onOpenMenu?: () => void }> = ({ onOpenMenu }) => {
   const navigate = useNavigate();
-  const [isOnline, setIsOnline] = useState<boolean>(true);
-  const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [userName, setUserName] = useState<string>('Owner');
-  const [userRole, setUserRole] = useState<string>('OWNER');
-  const [shopName, setShopName] = useState<string>('My Shop');
-  const [shopGstin, setShopGstin] = useState<string>('');
+  const { user, shop } = useSession();
+  const isOnline = useOnlineStatus();
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [theme, setTheme] = useState<Theme>(getStoredTheme());
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [logoutPrompt, setLogoutPrompt] = useState<number | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const isDark = resolvesToDark(theme);
 
-  const toggleTheme = () => {
-    const next: Theme = isDark ? 'light' : 'dark';
-    setTheme(next);
-    applyTheme(next);
-  };
-
   useEffect(() => {
-    setIsOnline(navigator.onLine);
-
-    const handleOnline = () => {
-      setIsOnline(true);
-      SyncManager.triggerSync(api);
-    };
-    const handleOffline = () => setIsOnline(false);
-
+    const handleOnline = () => SyncManager.triggerSync(api);
     window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
 
-    // Initial sync count check, then push any bills queued earlier for this shop
-    // (e.g. before the last logout, or while the network was down).
+    // Initial count, then push any bills queued earlier for this shop.
     SyncManager.getPendingCount().then((count) => {
       setPendingSyncCount(count);
       if (count > 0 && navigator.onLine) SyncManager.triggerSync(api);
@@ -57,153 +40,180 @@ export const Topbar: React.FC = () => {
       setPendingSyncCount(count);
     });
 
-    // Load stored user info
-    if (typeof window !== 'undefined') {
-      const storedUser = localStorage.getItem('billpro_user');
-      const storedShop = localStorage.getItem('billpro_shop');
-      if (storedUser) {
-        try {
-          const u = JSON.parse(storedUser);
-          setUserName(u.name || 'Staff');
-          setUserRole(u.role || 'CASHIER');
-        } catch {}
-      }
-      if (storedShop) {
-        try {
-          const s = JSON.parse(storedShop);
-          setShopName(s.name || 'My Shop');
-          setShopGstin(s.gstin || '');
-        } catch {}
-      }
-    }
-
     return () => {
       window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
       unsubscribe();
     };
   }, []);
 
+  // Close the user menu on outside click / Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
+
+  const toggleTheme = () => {
+    const next: Theme = isDark ? 'light' : 'dark';
+    setTheme(next);
+    applyTheme(next);
+  };
+
   const handleManualSync = async () => {
     setIsSyncing(true);
-    const { failed } = await SyncManager.triggerSync(api, { manual: true });
+    const { synced, failed } = await SyncManager.triggerSync(api, { manual: true });
     setIsSyncing(false);
     if (failed > 0) {
-      alert(`${failed} offline bill(s) were rejected by the server and are still queued. Ask a manager to review them.`);
+      toast.error(`${failed} offline bill(s) were rejected`, 'They are still saved on this device. Ask a manager to review them.');
+    } else if (synced > 0) {
+      toast.success(`${synced} offline bill(s) synced`);
     }
   };
 
-  const handleLogout = async () => {
-    if (typeof window === 'undefined') return;
-
-    // Offline bills are kept on this device and tagged with their shop, so they sync the next
-    // time anyone logs into that shop — but warn, because they are not on the server yet.
-    if (navigator.onLine) {
-      await SyncManager.triggerSync(api).catch(() => {});
-    }
-    const unsynced = await SyncManager.getTotalPendingCount();
-    if (
-      unsynced > 0 &&
-      !window.confirm(
-        `${unsynced} offline bill(s) have not reached the server yet. They stay saved on this device and will sync on the next login to this shop.\n\nLog out anyway?`
-      )
-    ) {
-      return;
-    }
-
+  const doLogout = () => {
     // Revoke the refresh token server-side (best effort) so a copied token can't be reused.
     const refreshToken = localStorage.getItem('billpro_refresh_token');
-    if (refreshToken) {
-      api.post('/auth/logout', { refreshToken }).catch(() => {});
-    }
+    if (refreshToken) api.post('/auth/logout', { refreshToken }).catch(() => {});
 
     localStorage.removeItem('billpro_token');
     localStorage.removeItem('billpro_refresh_token');
     localStorage.removeItem('billpro_user');
-    // billpro_shop_id / billpro_shop are intentionally kept: this device is the shop's counter,
-    // and Counter-PIN login needs to know which shop it belongs to.
+    // billpro_shop_id / billpro_shop are kept: this device is the shop's counter and
+    // Counter-PIN login needs to know which shop it belongs to.
     navigate('/login');
   };
 
+  const handleLogout = async () => {
+    setMenuOpen(false);
+    if (navigator.onLine) await SyncManager.triggerSync(api).catch(() => {});
+    const unsynced = await SyncManager.getTotalPendingCount();
+    if (unsynced > 0) setLogoutPrompt(unsynced);
+    else doLogout();
+  };
+
+  const initials = (user?.name || 'U')
+    .split(/\s+/)
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
   return (
-    <header className="h-16 bg-surface border-b border-border px-6 flex items-center justify-between shrink-0 z-20">
-      {/* Current Active Shop Badge */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 bg-surface-2 border border-border rounded-xl px-3 py-1.5 text-xs text-fg-muted">
-          <Store className="w-3.5 h-3.5 text-brand" />
-          <span className="font-semibold text-fg">{shopName}</span>
-          {shopGstin && (
-            <>
-              <span className="text-fg-subtle">•</span>
-              <span className="text-fg-subtle">GSTIN: {shopGstin}</span>
-            </>
+    <header className="z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-4 sm:px-6">
+      <div className="flex min-w-0 items-center gap-2">
+        <IconButton label="Open menu" className="lg:hidden" onClick={onOpenMenu}>
+          <Menu />
+        </IconButton>
+        <div className="flex min-w-0 items-center gap-2 text-sm">
+          <Store className="size-4 shrink-0 text-fg-subtle" aria-hidden="true" />
+          <span className="truncate font-medium text-fg">{shop?.name || 'Shop'}</span>
+          {shop?.gstin && (
+            <span className="hidden truncate text-fg-subtle md:inline">
+              · GSTIN <span className="font-mono">{shop.gstin}</span>
+            </span>
           )}
         </div>
       </div>
 
-      {/* Right Controls: Connectivity, Offline Queue & User Shift */}
-      <div className="flex items-center gap-3">
-        {/* Offline / Online Status Indicator */}
-        <div className="flex items-center gap-2">
-          {isOnline ? (
-            <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
-              <Wifi className="w-3.5 h-3.5" />
-              <span>Online</span>
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full animate-pulse">
-              <WifiOff className="w-3.5 h-3.5" />
-              <span>Offline Mode</span>
-            </span>
-          )}
+      <div className="flex items-center gap-2">
+        {!isOnline && (
+          <span className="inline-flex h-8 items-center gap-1.5 rounded-full border border-warning/30 bg-warning-soft px-3 text-xs font-medium text-warning">
+            <WifiOff className="size-3.5" aria-hidden="true" />
+            Offline
+          </span>
+        )}
 
-          {/* Pending Sync Queue Pill */}
-          {pendingSyncCount > 0 && (
-            <button
-              onClick={handleManualSync}
-              disabled={isSyncing || !isOnline}
-              className="flex items-center gap-1.5 text-xs bg-brand/10 hover:bg-brand/20 text-brand border border-brand/30 px-2.5 py-1 rounded-full transition-colors"
-              title="Click to sync offline records"
-            >
-              <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{pendingSyncCount} Pending Sync</span>
-            </button>
-          )}
-        </div>
-
-        {/* Light / Dark Theme Toggle */}
-        <button
-          onClick={toggleTheme}
-          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-          aria-label="Toggle color theme"
-          className="p-2 rounded-lg text-fg-subtle hover:text-fg hover:bg-surface-2 transition-colors"
-        >
-          {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-        </button>
-
-        <div className="h-4 w-px bg-border"></div>
-
-        {/* User Role & Logout */}
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <div className="text-xs font-semibold text-fg leading-tight">{userName}</div>
-            <div className="text-[10px] text-fg-subtle flex items-center justify-end gap-1 font-mono">
-              <ShieldCheck className="w-3 h-3 text-brand" />
-              <span>{userRole}</span>
-            </div>
-          </div>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-            className="text-fg-subtle hover:text-rose-500 hover:bg-rose-500/10 p-2 rounded-lg"
-            title="Log out or switch cashier"
+        {pendingSyncCount > 0 && (
+          <button
+            type="button"
+            onClick={handleManualSync}
+            disabled={isSyncing || !isOnline}
+            title={isOnline ? 'Send offline bills to the server now' : 'Will sync when back online'}
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-accent/30 bg-primary-soft px-3 text-xs font-medium text-accent transition-colors hover:bg-primary-soft/70 disabled:opacity-60"
           >
-            <LogOut className="w-4 h-4" />
-          </Button>
+            {isSyncing ? (
+              <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <CloudUpload className="size-3.5" aria-hidden="true" />
+            )}
+            {pendingSyncCount} pending sync
+          </button>
+        )}
+
+        <IconButton label={isDark ? 'Switch to light theme' : 'Switch to dark theme'} onClick={toggleTheme}>
+          {isDark ? <Sun /> : <Moon />}
+        </IconButton>
+
+        {/* User menu */}
+        <div className="relative" ref={menuRef}>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            className="flex h-10 items-center gap-2 rounded-control px-1.5 transition-colors hover:bg-surface-2"
+          >
+            <span className="flex size-8 items-center justify-center rounded-full bg-highlight text-xs font-semibold text-highlight-fg">
+              {initials}
+            </span>
+            <span className="hidden text-left leading-tight sm:block">
+              <span className="block max-w-[10rem] truncate text-sm font-medium text-fg">{user?.name || 'User'}</span>
+              <span className="block text-xs text-fg-subtle">{ROLE_LABEL[user?.role || ''] || user?.role}</span>
+            </span>
+            <ChevronDown className={cn('size-4 text-fg-subtle transition-transform', menuOpen && 'rotate-180')} aria-hidden="true" />
+          </button>
+
+          {menuOpen && (
+            <div
+              role="menu"
+              className="absolute right-0 top-full z-30 mt-1 w-56 overflow-hidden rounded-card border border-border bg-surface py-1 shadow-lg"
+            >
+              <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+                <UserRound className="size-4 text-fg-subtle" aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-fg">{user?.name}</p>
+                  <p className="truncate text-xs text-fg-subtle">{user?.email || user?.phone}</p>
+                </div>
+              </div>
+              <button
+                role="menuitem"
+                type="button"
+                onClick={handleLogout}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-fg hover:bg-surface-2"
+              >
+                <LogOut className="size-4 text-fg-subtle" aria-hidden="true" />
+                Log out / switch cashier
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={logoutPrompt !== null}
+        onClose={() => setLogoutPrompt(null)}
+        onConfirm={() => {
+          setLogoutPrompt(null);
+          doLogout();
+        }}
+        tone="primary"
+        title="Unsynced bills on this device"
+        confirmLabel="Log out anyway"
+        message={
+          <>
+            <strong className="text-fg">{logoutPrompt} offline bill(s)</strong> haven't reached the server yet. They
+            stay saved on this device and sync automatically on the next login to this shop.
+          </>
+        }
+      />
     </header>
   );
 };

@@ -1,283 +1,284 @@
-
-import React, { useState, useEffect } from 'react';
-import { Wallet, Plus, ArrowDownRight, ArrowUpRight, DollarSign, Building } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Wallet, Plus, Landmark, ReceiptIndianRupee as Receipt, BookOpen } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, Badge, Input } from '@/components/ui/card';
+import { Badge, Input, Select } from '@/components/ui/card';
 import { StatCard } from '@/components/ui/stat-card';
 import { Button } from '@/components/ui/button';
-import { Table, Thead, Tbody, Tr, Th, Td, Modal } from '@/components/ui/modal';
-import { api } from '@/services/api-client';
+import { Modal } from '@/components/ui/modal';
+import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/table';
+import { PageHeader, Tabs, EmptyState, ErrorState, TableSkeleton } from '@/components/ui/page';
+import { toast } from '@/components/ui/toast';
+import { api, asList } from '@/services/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { localIsoDate } from '@/offline/pending-operations';
 import { PaymentMethod } from '@/types';
 
+type Tab = 'expenses' | 'cashbook' | 'bankbook';
+const METHOD_LABEL: Record<string, string> = {
+  CASH: 'Cash',
+  UPI: 'UPI',
+  CARD: 'Card',
+  BANK_TRANSFER: 'Bank transfer',
+  CHEQUE: 'Cheque',
+};
+const CATEGORIES = [
+  'Tea & refreshments',
+  'Electricity & utilities',
+  'Shop rent',
+  'Stationery & thermal rolls',
+  'Staff advance',
+  'Repairs & maintenance',
+  'Transport & delivery',
+  'Other',
+];
+
 export default function ExpensesPage() {
-  const [activeTab, setActiveTab] = useState<'expenses' | 'cashbook' | 'bankbook'>('expenses');
+  const [activeTab, setActiveTab] = useState<Tab>('expenses');
   const [expenses, setExpenses] = useState<any[]>([]);
   const [cashBook, setCashBook] = useState<any>(null);
   const [bankBook, setBankBook] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Form state
-  const [category, setCategory] = useState('Tea & Refreshments');
-  const [amount, setAmount] = useState<number>(100);
+  const [category, setCategory] = useState(CATEGORIES[0]);
+  const [amount, setAmount] = useState<number | ''>('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
+  const [expenseDate, setExpenseDate] = useState(localIsoDate());
   const [recipientName, setRecipientName] = useState('');
   const [notes, setNotes] = useState('');
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
     try {
       const [expData, cashData, bankData] = await Promise.all([
-        api.get('/expenses').catch(() => ({ expenses: [] })),
-        api.get('/expenses/cash-book').catch(() => null),
-        api.get('/expenses/bank-book').catch(() => null),
+        api.get('/expenses', { limit: 100 }),
+        api.get('/expenses/cash-book'),
+        api.get('/expenses/bank-book'),
       ]);
-
-      setExpenses(expData.expenses || expData || []);
-      if (cashData) setCashBook(cashData);
-      if (bankData) setBankBook(bankData);
-    } catch (err) {
-      console.error('Failed to load expenses/books:', err);
+      setExpenses(asList(expData, 'expenses'));
+      setCashBook(cashData);
+      setBankBook(bankData);
+    } catch (err: any) {
+      setLoadError(err.message);
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
+
+  const openAdd = () => {
+    setCategory(CATEGORIES[0]);
+    setAmount('');
+    setPaymentMethod('CASH');
+    setExpenseDate(localIsoDate());
+    setRecipientName('');
+    setNotes('');
+    setIsAddModalOpen(true);
+  };
 
   const handleCreateExpense = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true);
     try {
       await api.post('/expenses', {
         category,
         amount: Number(amount),
         paymentMethod,
+        expenseDate,
         recipientName: recipientName || undefined,
         notes: notes || undefined,
       });
-
-      alert('Expense recorded! Cash/Bank book updated.');
+      toast.success('Expense recorded', paymentMethod === 'CASH' ? 'Cash book updated.' : 'Bank book updated.');
       setIsAddModalOpen(false);
       loadData();
     } catch (err: any) {
-      alert(`Failed to save expense: ${err.message}`);
+      toast.error('Expense not saved', err.message);
+    } finally {
+      setIsSaving(false);
     }
   };
+
+  const bookTable = (book: any, withMethod: boolean) =>
+    !book?.entries?.length ? (
+      <EmptyState icon={BookOpen} title="No entries yet" />
+    ) : (
+      <Table>
+        <Thead>
+          <Tr>
+            <Th>Date</Th>
+            <Th>Description</Th>
+            {withMethod && <Th>Method</Th>}
+            <Th numeric>Money in</Th>
+            <Th numeric>Money out</Th>
+            {withMethod && <Th>Reference</Th>}
+          </Tr>
+        </Thead>
+        <Tbody>
+          {book.entries.map((e: any) => (
+            <Tr key={e.id}>
+              <Td>{formatDate(e.entryDate)}</Td>
+              <Td className="text-fg">{e.description}</Td>
+              {withMethod && (
+                <Td>
+                  <Badge variant="neutral">{METHOD_LABEL[e.paymentMethod] || e.paymentMethod}</Badge>
+                </Td>
+              )}
+              <Td numeric className={Number(e.inflowAmount) > 0 ? 'text-success' : ''}>
+                {Number(e.inflowAmount) > 0 ? formatCurrency(e.inflowAmount) : '—'}
+              </Td>
+              <Td numeric className={Number(e.outflowAmount) > 0 ? 'text-danger' : ''}>
+                {Number(e.outflowAmount) > 0 ? formatCurrency(e.outflowAmount) : '—'}
+              </Td>
+              {withMethod && <Td className="font-mono text-xs">{e.transactionReference || '—'}</Td>}
+            </Tr>
+          ))}
+        </Tbody>
+      </Table>
+    );
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold text-fg tracking-tight">Expenses, Cash Book & Bank Book</h2>
-            <p className="text-xs text-fg-subtle mt-1">Operational overheads and physical drawer cash reconciliation</p>
-          </div>
-          <Button variant="primary" onClick={() => setIsAddModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-1.5" />
-            Record Expense
-          </Button>
-        </div>
+        <PageHeader
+          title="Expenses & cash book"
+          description="Shop running costs, and every rupee in and out of the cash drawer and bank."
+          actions={
+            <Button onClick={openAdd}>
+              <Plus /> Record expense
+            </Button>
+          }
+        />
 
-        {/* 2 Financial Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <StatCard
-            label="Physical Cash Drawer Balance"
+            label="Cash book balance"
             value={formatCurrency(cashBook?.netCashBalance || 0)}
             icon={Wallet}
-            tone="emerald"
-            footerLeft={`Inflows ${formatCurrency(cashBook?.totalInflow || 0)} • Outflows ${formatCurrency(cashBook?.totalOutflow || 0)}`}
+            tone="success"
+            isLoading={isLoading}
+            footerLeft={`In ${formatCurrency(cashBook?.totalInflow || 0)} · Out ${formatCurrency(cashBook?.totalOutflow || 0)}`}
           />
           <StatCard
-            label="Bank & Digital Inflows Balance"
+            label="Bank & digital balance"
             value={formatCurrency(bankBook?.netBankBalance || 0)}
-            icon={Building}
-            tone="brand"
-            footerLeft="UPI, Card & Bank settlements"
+            icon={Landmark}
+            tone="info"
+            isLoading={isLoading}
+            footerLeft={`In ${formatCurrency(bankBook?.totalInflow || 0)} · Out ${formatCurrency(bankBook?.totalOutflow || 0)}`}
           />
         </div>
 
-        {/* Tab Selection */}
-        <div className="flex bg-surface border border-border p-1 rounded-xl w-fit">
-          <button
-            onClick={() => setActiveTab('expenses')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'expenses' ? 'bg-emerald-600 text-white shadow-md' : 'text-fg-subtle hover:text-fg'
-            }`}
-          >
-            Expenses Log
-          </button>
-          <button
-            onClick={() => setActiveTab('cashbook')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'cashbook' ? 'bg-emerald-600 text-white shadow-md' : 'text-fg-subtle hover:text-fg'
-            }`}
-          >
-            Cash Book Entries
-          </button>
-          <button
-            onClick={() => setActiveTab('bankbook')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'bankbook' ? 'bg-emerald-600 text-white shadow-md' : 'text-fg-subtle hover:text-fg'
-            }`}
-          >
-            Bank Book Entries
-          </button>
-        </div>
+        <Tabs<Tab>
+          label="Books"
+          value={activeTab}
+          onChange={setActiveTab}
+          items={[
+            { value: 'expenses', label: 'Expenses', icon: Receipt, count: expenses.length },
+            { value: 'cashbook', label: 'Cash book', icon: Wallet },
+            { value: 'bankbook', label: 'Bank book', icon: Landmark },
+          ]}
+        />
 
-        {/* Tab Content */}
-        {activeTab === 'expenses' && (
-          <Card>
-            {expenses.length === 0 ? (
-              <div className="text-center py-12 text-fg-subtle text-sm">No operational expenses recorded.</div>
-            ) : (
-              <Table>
-                <Thead>
-                  <Tr>
-                    <Th>Date</Th>
-                    <Th>Category</Th>
-                    <Th>Paid To</Th>
-                    <Th>Method</Th>
-                    <Th>Amount</Th>
-                    <Th>Notes</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {expenses.map((exp) => (
-                    <Tr key={exp.id}>
-                      <Td>{formatDate(exp.expenseDate)}</Td>
-                      <Td className="font-semibold text-fg">{exp.category}</Td>
-                      <Td>{exp.recipientName || '-'}</Td>
-                      <Td>
-                        <Badge variant="neutral">{exp.paymentMethod}</Badge>
-                      </Td>
-                      <Td className="font-bold text-rose-600 dark:text-rose-400">{formatCurrency(exp.amount)}</Td>
-                      <Td className="text-xs text-fg-subtle">{exp.notes || '-'}</Td>
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
-            )}
-          </Card>
-        )}
-
-        {activeTab === 'cashbook' && (
-          <Card>
+        {isLoading ? (
+          <TableSkeleton cols={5} />
+        ) : loadError ? (
+          <ErrorState message={loadError} onRetry={loadData} />
+        ) : activeTab === 'expenses' ? (
+          expenses.length === 0 ? (
+            <EmptyState
+              icon={Receipt}
+              title="No expenses recorded"
+              description="Record rent, electricity, tea and other shop costs to see your real profit."
+              action={
+                <Button variant="secondary" onClick={openAdd}>
+                  <Plus /> Record expense
+                </Button>
+              }
+            />
+          ) : (
             <Table>
               <Thead>
                 <Tr>
-                  <Th>Timestamp</Th>
-                  <Th>Description</Th>
-                  <Th>Inflow (+)</Th>
-                  <Th>Outflow (-)</Th>
-                  <Th>Type</Th>
+                  <Th>Date</Th>
+                  <Th>Category</Th>
+                  <Th>Paid to</Th>
+                  <Th>Method</Th>
+                  <Th numeric>Amount</Th>
+                  <Th>Note</Th>
                 </Tr>
               </Thead>
               <Tbody>
-                {cashBook?.entries?.map((e: any) => (
-                  <Tr key={e.id}>
-                    <Td className="text-xs">{formatDate(e.entryDate)}</Td>
-                    <Td className="font-medium text-fg">{e.description}</Td>
-                    <Td className="text-emerald-600 dark:text-emerald-400 font-bold">{Number(e.inflowAmount) > 0 ? formatCurrency(e.inflowAmount) : '-'}</Td>
-                    <Td className="text-rose-600 dark:text-rose-400 font-bold">{Number(e.outflowAmount) > 0 ? formatCurrency(e.outflowAmount) : '-'}</Td>
-                    <Td className="text-xs font-mono text-fg-subtle">{e.referenceType}</Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </Card>
-        )}
-
-        {activeTab === 'bankbook' && (
-          <Card>
-            <Table>
-              <Thead>
-                <Tr>
-                  <Th>Timestamp</Th>
-                  <Th>Description</Th>
-                  <Th>Channel</Th>
-                  <Th>Inflow (+)</Th>
-                  <Th>Outflow (-)</Th>
-                  <Th>Reference</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {bankBook?.entries?.map((e: any) => (
-                  <Tr key={e.id}>
-                    <Td className="text-xs">{formatDate(e.entryDate)}</Td>
-                    <Td className="font-medium text-fg">{e.description}</Td>
+                {expenses.map((exp) => (
+                  <Tr key={exp.id}>
+                    <Td>{formatDate(exp.expenseDate)}</Td>
+                    <Td className="font-medium text-fg">{exp.category}</Td>
+                    <Td>{exp.recipientName || '—'}</Td>
                     <Td>
-                      <Badge variant="info">{e.paymentMethod}</Badge>
+                      <Badge variant="neutral">{METHOD_LABEL[exp.paymentMethod] || exp.paymentMethod}</Badge>
                     </Td>
-                    <Td className="text-emerald-600 dark:text-emerald-400 font-bold">{Number(e.inflowAmount) > 0 ? formatCurrency(e.inflowAmount) : '-'}</Td>
-                    <Td className="text-rose-600 dark:text-rose-400 font-bold">{Number(e.outflowAmount) > 0 ? formatCurrency(e.outflowAmount) : '-'}</Td>
-                    <Td className="text-xs font-mono text-fg-subtle">{e.transactionReference || '-'}</Td>
+                    <Td numeric className="font-medium text-fg">
+                      {formatCurrency(exp.amount)}
+                    </Td>
+                    <Td className="max-w-xs truncate">{exp.notes || '—'}</Td>
                   </Tr>
                 ))}
               </Tbody>
             </Table>
-          </Card>
+          )
+        ) : activeTab === 'cashbook' ? (
+          bookTable(cashBook, false)
+        ) : (
+          bookTable(bankBook, true)
         )}
       </div>
 
-      {/* Record Expense Modal */}
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Record Operational Expense" maxWidth="md">
+      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Record expense" maxWidth="md">
         <form onSubmit={handleCreateExpense} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-fg-muted mb-1">Expense Category</label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-fg"
-            >
-              <option value="Tea & Refreshments">Tea & Refreshments / Pantry</option>
-              <option value="Electricity & Utilities">Electricity & Utilities</option>
-              <option value="Shop Rent">Shop Rent</option>
-              <option value="Stationery & Rolls">Stationery & Thermal Rolls</option>
-              <option value="Staff Daily Advance">Staff Daily Advance</option>
-              <option value="Repairs & Maintenance">Repairs & Maintenance</option>
-              <option value="Other Overhead">Other Overhead</option>
-            </select>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Select label="Category" value={category} onChange={(e) => setCategory(e.target.value)}>
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
+            <Input label="Date" type="date" required value={expenseDate} max={localIsoDate()} onChange={(e) => setExpenseDate(e.target.value)} />
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
               label="Amount (₹)"
               type="number"
               step="0.01"
+              min={0.01}
               required
               value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
+              onChange={(e) => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
+              placeholder="0.00"
             />
-            <div>
-              <label className="block text-xs font-medium text-fg-muted mb-1">Payment Method</label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-fg"
-              >
-                <option value="CASH">Cash Drawer</option>
-                <option value="UPI">Counter UPI</option>
-                <option value="BANK_TRANSFER">Bank Transfer</option>
-              </select>
-            </div>
+            <Select label="Paid by" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}>
+              {Object.entries(METHOD_LABEL).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </Select>
           </div>
-
-          <Input
-            label="Paid To (Recipient)"
-            value={recipientName}
-            onChange={(e) => setRecipientName(e.target.value)}
-            placeholder="e.g. Ramesh Tea Stall"
-          />
-
-          <Input
-            label="Notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Daily tea & snacks for staff"
-          />
-
-          <Button type="submit" variant="primary" size="md" className="w-full mt-4">
-            Post Expense & Update Drawer
-          </Button>
+          <Input label="Paid to" value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="Person or business" />
+          <Input label="Note" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" isLoading={isSaving}>
+              Save expense
+            </Button>
+          </div>
         </form>
       </Modal>
     </DashboardLayout>

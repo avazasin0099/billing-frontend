@@ -208,3 +208,13 @@ class ApiClient {
 }
 
 export const api = new ApiClient();
+
+/**
+ * Normalise a list response. List endpoints return the array directly as `data`
+ * (pagination goes in `meta`); some older callers expected `{ [key]: [...] }`. Accept both.
+ */
+export function asList<T = any>(data: any, key?: string): T[] {
+  if (Array.isArray(data)) return data;
+  if (key && Array.isArray(data?.[key])) return data[key];
+  return [];
+}

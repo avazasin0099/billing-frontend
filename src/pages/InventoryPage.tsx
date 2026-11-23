@@ -1,63 +1,95 @@
-
-import React, { useState, useEffect } from 'react';
-import { Boxes, AlertTriangle, History, ArrowDownRight, ArrowUpRight, Plus, Sliders } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Boxes, TriangleAlert, History, Tag, SlidersHorizontal, Package, CircleCheck } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardTitle, Badge, Input } from '@/components/ui/card';
+import { Badge, Input, Select } from '@/components/ui/card';
 import { StatCard } from '@/components/ui/stat-card';
 import { Button } from '@/components/ui/button';
-import { Table, Thead, Tbody, Tr, Th, Td, Modal } from '@/components/ui/modal';
-import { api } from '@/services/api-client';
+import { Modal } from '@/components/ui/modal';
+import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/table';
+import { PageHeader, Tabs, EmptyState, ErrorState, TableSkeleton } from '@/components/ui/page';
+import { toast } from '@/components/ui/toast';
+import { api, asList } from '@/services/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { useSession } from '@/lib/session';
 import { Item } from '@/types';
 
+type Tab = 'all' | 'alerts' | 'movements';
+
+const MOVEMENT_LABEL: Record<string, string> = {
+  OPENING_STOCK: 'Opening stock',
+  PURCHASE: 'Purchase',
+  SALE: 'Sale',
+  SALE_RETURN: 'Sales return',
+  PURCHASE_RETURN: 'Purchase return',
+  ADJUSTMENT_IN: 'Count: added',
+  ADJUSTMENT_OUT: 'Count: removed',
+  STOCK_TAKE: 'Stock take',
+  OFFLINE_OVERDRAFT: 'Offline oversell',
+};
+
+const REASONS = [
+  { value: 'STOCK_TAKE_CORRECTION', label: 'Periodic stock count' },
+  { value: 'DAMAGED', label: 'Damaged / broken' },
+  { value: 'EXPIRED', label: 'Expired' },
+  { value: 'THEFT', label: 'Lost / stolen' },
+  { value: 'FOUND', label: 'Extra stock found' },
+  { value: 'OTHER', label: 'Other' },
+];
+
 export default function InventoryPage() {
-  const [activeTab, setActiveTab] = useState<'all' | 'alerts' | 'movements'>('all');
+  const { isManager } = useSession();
+  const [activeTab, setActiveTab] = useState<Tab>('all');
   const [items, setItems] = useState<Item[]>([]);
   const [alerts, setAlerts] = useState<Item[]>([]);
   const [movements, setMovements] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Adjustment Modal
-  const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
-  const [physicalCount, setPhysicalCount] = useState<number>(0);
-  const [adjustReason, setAdjustReason] = useState<string>('DAMAGED');
-  const [adjustNotes, setAdjustNotes] = useState<string>('');
+  const [physicalCount, setPhysicalCount] = useState<number | ''>('');
+  const [adjustReason, setAdjustReason] = useState('STOCK_TAKE_CORRECTION');
+  const [adjustNotes, setAdjustNotes] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
     try {
       const [sum, alertList, itemList, movList] = await Promise.all([
-        api.get('/inventory/summary').catch(() => null),
-        api.get('/inventory/alerts').catch(() => []),
-        api.get('/items', { limit: 100 }).catch(() => ({ items: [] })),
-        api.get('/inventory/movements', { limit: 20 }).catch(() => ({ movements: [] })),
+        api.get('/inventory/summary'),
+        api.get('/inventory/alerts'),
+        api.get('/items', { limit: 100, isActive: 'true' }),
+        api.get('/inventory/movements', { limit: 50 }),
       ]);
-
-      if (sum) setSummary(sum);
+      setSummary(sum);
       setAlerts(alertList || []);
-      setItems(itemList.items || itemList || []);
-      setMovements(movList.movements || movList || []);
-    } catch (err) {
-      console.error('Failed to load inventory data:', err);
+      setItems(asList(itemList, 'items'));
+      setMovements(asList(movList, 'movements'));
+    } catch (err: any) {
+      setLoadError(err.message);
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
-  const handleOpenAdjustModal = (item: Item) => {
+  const openAdjust = (item: Item) => {
     setSelectedItem(item);
     setPhysicalCount(Number(item.currentStock));
-    setAdjustReason('DAMAGED');
+    setAdjustReason('STOCK_TAKE_CORRECTION');
     setAdjustNotes('');
-    setIsAdjustModalOpen(true);
   };
+
+  const variance = selectedItem && physicalCount !== '' ? Number(physicalCount) - Number(selectedItem.currentStock) : 0;
 
   const handleSaveAdjustment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedItem) return;
-
+    if (!selectedItem || physicalCount === '') return;
+    setIsSaving(true);
     try {
       await api.post('/inventory/adjustments', {
         itemId: selectedItem.id,
@@ -65,253 +97,251 @@ export default function InventoryPage() {
         reason: adjustReason,
         notes: adjustNotes,
       });
-
-      alert('Stock adjustment recorded and movement audit logged!');
-      setIsAdjustModalOpen(false);
+      toast.success('Stock updated', `${selectedItem.name}: ${variance > 0 ? '+' : ''}${variance}`);
+      setSelectedItem(null);
       loadData();
     } catch (err: any) {
-      alert(`Adjustment failed: ${err.message}`);
+      toast.error('Stock not updated', err.message);
+    } finally {
+      setIsSaving(false);
     }
+  };
+
+  const unit = (i: Item) => i.unit?.code || 'pcs';
+  const stockBadge = (i: Item) => {
+    const s = Number(i.currentStock);
+    if (s <= 0) return <Badge variant="danger">Out of stock</Badge>;
+    if (s <= Number(i.reorderLevel || 0)) return <Badge variant="warning">Low</Badge>;
+    return <Badge variant="success">In stock</Badge>;
   };
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col h-full min-h-0 gap-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
-          <div>
-            <h2 className="text-xl font-bold text-fg tracking-tight">Inventory & Stock Control</h2>
-            <p className="text-xs text-fg-subtle mt-1">Real-time stock valuation, movements audit, and count reconciliation</p>
-          </div>
-        </div>
+      <div className="flex h-full min-h-0 flex-col gap-5">
+        <PageHeader title="Stock" description="Current stock, low-stock alerts and every stock movement." />
 
-        {/* 3 Metric Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 shrink-0">
+        <div className="grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-3">
           <StatCard
-            label="Stock Purchase Value"
+            label="Stock value at cost"
             value={formatCurrency(summary?.totalPurchaseValuation || 0)}
             icon={Boxes}
-            tone="brand"
-            footerLeft={`${summary?.totalStockUnits || 0} total physical units`}
+            tone="info"
+            isLoading={isLoading}
+            footerLeft={`${summary?.totalStockUnits || 0} units`}
           />
           <StatCard
-            label="Stock Retail Value (MRP)"
+            label="Stock value at selling price"
             value={formatCurrency(summary?.totalRetailValuation || 0)}
-            icon={ArrowUpRight}
-            tone="emerald"
-            footerLeft={`${summary?.totalItemsCount || 0} registered catalog items`}
+            icon={Tag}
+            tone="primary"
+            isLoading={isLoading}
+            footerLeft={`${summary?.totalItemsCount || 0} active products`}
           />
           <StatCard
-            label="Low Stock Warning"
-            value={`${summary?.lowStockCount || 0} Products`}
-            icon={AlertTriangle}
-            tone="rose"
-            footerLeft="Below defined reorder threshold"
+            label="Low stock"
+            value={`${summary?.lowStockCount || 0} products`}
+            icon={TriangleAlert}
+            tone={(summary?.lowStockCount || 0) > 0 ? 'danger' : 'neutral'}
+            isLoading={isLoading}
+            footerLeft="At or below reorder level"
           />
         </div>
 
-        {/* Tab Selection */}
-        <div className="flex bg-surface border border-border p-1 rounded-xl w-fit shrink-0">
-          <button
-            onClick={() => setActiveTab('all')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'all' ? 'bg-emerald-600 text-white shadow-md' : 'text-fg-subtle hover:text-fg'
-            }`}
-          >
-            All Stock ({items.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('alerts')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-              activeTab === 'alerts' ? 'bg-emerald-600 text-white shadow-md' : 'text-fg-subtle hover:text-fg'
-            }`}
-          >
-            <AlertTriangle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-            Low Stock Alerts ({alerts.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('movements')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-              activeTab === 'movements' ? 'bg-emerald-600 text-white shadow-md' : 'text-fg-subtle hover:text-fg'
-            }`}
-          >
-            <History className="w-3.5 h-3.5" />
-            Movements Audit Ledger
-          </button>
-        </div>
+        <Tabs<Tab>
+          label="Stock views"
+          value={activeTab}
+          onChange={setActiveTab}
+          className="shrink-0 self-start"
+          items={[
+            { value: 'all', label: 'All stock', icon: Package, count: items.length },
+            { value: 'alerts', label: 'Low stock', icon: TriangleAlert, count: alerts.length },
+            { value: 'movements', label: 'Movements', icon: History },
+          ]}
+        />
 
-        {/* Tab 1: All Stock */}
-        {activeTab === 'all' && (
-          <div className="flex-1 min-h-0">
-            <Table>
-              <Thead>
-                <Tr>
-                  <Th>Product</Th>
-                  <Th>SKU</Th>
-                  <Th className="text-right">Cost</Th>
-                  <Th className="text-right">Selling Price</Th>
-                  <Th className="text-right">Current Shelf Stock</Th>
-                  <Th className="text-right">Reorder Level</Th>
-                  <Th className="text-right">Actions</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {items.map((item) => (
-                  <Tr key={item.id}>
-                    <Td className="font-semibold text-fg">{item.name}</Td>
-                    <Td className="font-mono text-xs">{item.sku}</Td>
-                    <Td className="text-right text-fg-subtle">{formatCurrency(item.purchasePrice)}</Td>
-                    <Td className="text-right font-bold text-fg">{formatCurrency(item.sellingPrice)}</Td>
-                    <Td className="text-right">
-                      <span
-                        className={`font-bold ${
-                          Number(item.currentStock) <= Number(item.reorderLevel)
-                            ? 'text-rose-600 dark:text-rose-400'
-                            : 'text-emerald-600 dark:text-emerald-400'
-                        }`}
-                      >
-                        {item.currentStock} {item.unit?.code || 'pcs'}
-                      </span>
-                    </Td>
-                    <Td className="text-right text-fg-subtle">{item.reorderLevel} {item.unit?.code || 'pcs'}</Td>
-                    <Td className="text-right">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => handleOpenAdjustModal(item)}
-                        className="text-xs"
-                      >
-                        <Sliders className="w-3.5 h-3.5 mr-1" />
-                        Stock Count
-                      </Button>
-                    </Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </div>
-        )}
-
-        {/* Tab 2: Low Stock Alerts */}
-        {activeTab === 'alerts' && (
-          <div className="flex-1 min-h-0">
-            {alerts.length === 0 ? (
-              <Card className="h-full flex items-center justify-center text-fg-subtle text-sm">All inventory levels are healthy! No reorder alerts.</Card>
+        <div className="min-h-0 flex-1">
+          {isLoading ? (
+            <TableSkeleton cols={6} />
+          ) : loadError ? (
+            <ErrorState message={loadError} onRetry={loadData} />
+          ) : activeTab === 'all' ? (
+            items.length === 0 ? (
+              <EmptyState icon={Package} title="No products yet" description="Add products in Items to start tracking stock." />
             ) : (
               <Table>
                 <Thead>
                   <Tr>
-                    <Th>Alert Item</Th>
-                    <Th>Current Available</Th>
-                    <Th>Reorder Level</Th>
-                    <Th>Deficit / Needed</Th>
-                    <Th className="text-right">Action</Th>
+                    <Th>Product</Th>
+                    <Th>SKU</Th>
+                    {isManager && <Th numeric>Cost</Th>}
+                    <Th numeric>Selling price</Th>
+                    <Th numeric>In stock</Th>
+                    <Th numeric>Reorder at</Th>
+                    <Th>Status</Th>
+                    {isManager && (
+                      <Th>
+                        <span className="sr-only">Actions</span>
+                      </Th>
+                    )}
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {items.map((item) => (
+                    <Tr key={item.id}>
+                      <Td className="font-medium text-fg">{item.name}</Td>
+                      <Td className="font-mono text-xs">{item.sku}</Td>
+                      {isManager && <Td numeric>{formatCurrency(item.purchasePrice)}</Td>}
+                      <Td numeric className="text-fg">
+                        {formatCurrency(item.sellingPrice)}
+                      </Td>
+                      <Td numeric className="font-medium text-fg">
+                        {Number(item.currentStock)} {unit(item)}
+                      </Td>
+                      <Td numeric>
+                        {Number(item.reorderLevel)} {unit(item)}
+                      </Td>
+                      <Td>{stockBadge(item)}</Td>
+                      {isManager && (
+                        <Td className="text-right">
+                          <Button variant="secondary" size="sm" onClick={() => openAdjust(item)}>
+                            <SlidersHorizontal /> Count
+                          </Button>
+                        </Td>
+                      )}
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            )
+          ) : activeTab === 'alerts' ? (
+            alerts.length === 0 ? (
+              <EmptyState icon={CircleCheck} title="All stock levels are healthy" description="No product is at or below its reorder level." />
+            ) : (
+              <Table>
+                <Thead>
+                  <Tr>
+                    <Th>Product</Th>
+                    <Th numeric>In stock</Th>
+                    <Th numeric>Reorder at</Th>
+                    <Th numeric>Short by</Th>
+                    {isManager && (
+                      <Th>
+                        <span className="sr-only">Actions</span>
+                      </Th>
+                    )}
                   </Tr>
                 </Thead>
                 <Tbody>
                   {alerts.map((item) => (
                     <Tr key={item.id}>
-                      <Td className="font-semibold text-fg">{item.name}</Td>
-                      <Td className="text-rose-600 dark:text-rose-400 font-bold">{item.currentStock} {item.unit?.code || 'pcs'}</Td>
-                      <Td>{item.reorderLevel} {item.unit?.code || 'pcs'}</Td>
-                      <Td className="text-amber-600 dark:text-amber-400 font-semibold">
-                        {Math.max(0, Number(item.reorderLevel) - Number(item.currentStock) + 10)} units recommended
+                      <Td className="font-medium text-fg">{item.name}</Td>
+                      <Td numeric className="font-medium text-danger">
+                        {Number(item.currentStock)} {unit(item)}
                       </Td>
-                      <Td className="text-right">
-                        <Button variant="secondary" size="sm" onClick={() => handleOpenAdjustModal(item)}>
-                          Fix Count
-                        </Button>
+                      <Td numeric>
+                        {Number(item.reorderLevel)} {unit(item)}
                       </Td>
+                      <Td numeric>
+                        {Math.max(0, Number(item.reorderLevel) - Number(item.currentStock))} {unit(item)}
+                      </Td>
+                      {isManager && (
+                        <Td className="text-right">
+                          <Button variant="secondary" size="sm" onClick={() => openAdjust(item)}>
+                            <SlidersHorizontal /> Count
+                          </Button>
+                        </Td>
+                      )}
                     </Tr>
                   ))}
                 </Tbody>
               </Table>
-            )}
-          </div>
-        )}
-
-        {/* Tab 3: Movements Audit Ledger */}
-        {activeTab === 'movements' && (
-          <div className="flex-1 min-h-0">
+            )
+          ) : movements.length === 0 ? (
+            <EmptyState icon={History} title="No stock movements yet" />
+          ) : (
             <Table>
               <Thead>
                 <Tr>
-                  <Th>Timestamp</Th>
-                  <Th>Item</Th>
-                  <Th>Movement Type</Th>
-                  <Th>Quantity Delta</Th>
-                  <Th>Unit Cost</Th>
-                  <Th>Reference / Notes</Th>
+                  <Th>Date</Th>
+                  <Th>Product</Th>
+                  <Th>Type</Th>
+                  <Th numeric>Change</Th>
+                  {isManager && <Th numeric>Unit cost</Th>}
+                  <Th>Note</Th>
                 </Tr>
               </Thead>
               <Tbody>
-                {movements.map((mov) => (
-                  <Tr key={mov.id}>
-                    <Td className="text-xs">{formatDate(mov.createdAt)}</Td>
-                    <Td className="font-semibold text-fg">{mov.item?.name}</Td>
-                    <Td>
-                      <span className="text-xs font-mono px-2 py-0.5 rounded bg-surface-2 border border-border text-brand">
-                        {mov.movementType}
-                      </span>
-                    </Td>
-                    <Td className={`font-bold ${Number(mov.quantity) > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                      {Number(mov.quantity) > 0 ? `+${mov.quantity}` : mov.quantity}
-                    </Td>
-                    <Td>{formatCurrency(mov.unitCost)}</Td>
-                    <Td className="text-xs text-fg-subtle">{mov.notes || mov.referenceType}</Td>
-                  </Tr>
-                ))}
+                {movements.map((mov) => {
+                  const q = Number(mov.quantity);
+                  return (
+                    <Tr key={mov.id}>
+                      <Td>{formatDate(mov.createdAt)}</Td>
+                      <Td className="font-medium text-fg">{mov.item?.name}</Td>
+                      <Td>
+                        <Badge variant="neutral">{MOVEMENT_LABEL[mov.movementType] || mov.movementType}</Badge>
+                      </Td>
+                      <Td numeric className={q > 0 ? 'font-medium text-success' : 'font-medium text-danger'}>
+                        {q > 0 ? `+${q}` : q}
+                      </Td>
+                      {isManager && <Td numeric>{formatCurrency(mov.unitCost)}</Td>}
+                      <Td className="max-w-sm truncate">{mov.notes || mov.referenceType}</Td>
+                    </Tr>
+                  );
+                })}
               </Tbody>
             </Table>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Stock Count / Adjustment Modal */}
       <Modal
-        isOpen={isAdjustModalOpen}
-        onClose={() => setIsAdjustModalOpen(false)}
-        title={`Adjust Stock — ${selectedItem?.name}`}
+        isOpen={!!selectedItem}
+        onClose={() => setSelectedItem(null)}
+        title={`Update stock count · ${selectedItem?.name || ''}`}
+        description="Enter the quantity you physically counted on the shelf."
         maxWidth="md"
       >
         <form onSubmit={handleSaveAdjustment} className="space-y-4">
-          <div className="bg-surface-2 p-3 rounded-xl border border-border text-xs flex justify-between">
-            <span className="text-fg-subtle">Current App Stock:</span>
-            <span className="font-bold text-fg">{selectedItem?.currentStock} units</span>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-card border border-border bg-surface-2 p-3">
+              <p className="text-xs text-fg-muted">In the system</p>
+              <p className="text-lg font-semibold text-fg tabular-nums">
+                {Number(selectedItem?.currentStock || 0)} {selectedItem ? unit(selectedItem) : ''}
+              </p>
+            </div>
+            <div className="rounded-card border border-border bg-surface-2 p-3">
+              <p className="text-xs text-fg-muted">Difference</p>
+              <p className={`text-lg font-semibold tabular-nums ${variance > 0 ? 'text-success' : variance < 0 ? 'text-danger' : 'text-fg'}`}>
+                {variance > 0 ? `+${variance}` : variance}
+              </p>
+            </div>
           </div>
-
           <Input
-            label="Physical Count Counted on Shelf"
+            label="Counted quantity"
             type="number"
+            min={0}
+            step="any"
             required
+            autoFocus
             value={physicalCount}
-            onChange={(e) => setPhysicalCount(Number(e.target.value))}
+            onChange={(e) => setPhysicalCount(e.target.value === '' ? '' : Number(e.target.value))}
           />
-
-          <div>
-            <label className="block text-xs font-medium text-fg-muted mb-1.5">Adjustment Reason Code</label>
-            <select
-              value={adjustReason}
-              onChange={(e) => setAdjustReason(e.target.value)}
-              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-fg"
-            >
-              <option value="DAMAGED">Damaged / Broken Packaging</option>
-              <option value="EXPIRED">Expired Past Expiry Date</option>
-              <option value="FOUND">Physical Stock Found (Surplus)</option>
-              <option value="THEFT">Pilferage / Loss</option>
-              <option value="STOCK_TAKE_CORRECTION">Periodic Stock-Take Correction</option>
-            </select>
+          <Select label="Reason" value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)}>
+            {REASONS.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+          </Select>
+          <Input label="Note" value={adjustNotes} onChange={(e) => setAdjustNotes(e.target.value)} placeholder="Optional" />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="secondary" onClick={() => setSelectedItem(null)}>
+              Cancel
+            </Button>
+            <Button type="submit" isLoading={isSaving} disabled={variance === 0 || physicalCount === ''}>
+              Save count
+            </Button>
           </div>
-
-          <Input
-            label="Notes (Optional)"
-            value={adjustNotes}
-            onChange={(e) => setAdjustNotes(e.target.value)}
-            placeholder="e.g. Audit by store supervisor"
-          />
-
-          <Button type="submit" variant="primary" size="md" className="w-full mt-4">
-            Record Adjustment & Update Balance
-          </Button>
         </form>
       </Modal>
     </DashboardLayout>

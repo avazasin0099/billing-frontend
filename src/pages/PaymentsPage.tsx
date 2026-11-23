@@ -1,50 +1,78 @@
-
-import React, { useState, useEffect } from 'react';
-import { CreditCard, Plus, Filter, AlertCircle } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { CreditCard, Plus, Info } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, Badge, Input } from '@/components/ui/card';
+import { Badge, Input, Select } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Table, Thead, Tbody, Tr, Th, Td, Modal } from '@/components/ui/modal';
-import { api } from '@/services/api-client';
+import { Modal } from '@/components/ui/modal';
+import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/table';
+import { PageHeader, EmptyState, ErrorState, TableSkeleton } from '@/components/ui/page';
+import { toast } from '@/components/ui/toast';
+import { api, asList } from '@/services/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Customer, PaymentMethod } from '@/types';
+
+const METHOD_LABEL: Record<string, string> = {
+  CASH: 'Cash',
+  UPI: 'UPI',
+  CARD: 'Card',
+  BANK_TRANSFER: 'Bank transfer',
+  CHEQUE: 'Cheque',
+  OTHER: 'Other',
+};
 
 export default function PaymentsPage() {
   const [payments, setPayments] = useState<any[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [methodFilter, setMethodFilter] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Form state
+  // Form state — no pre-selected customer and no made-up default amount.
   const [customerId, setCustomerId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
-  const [amount, setAmount] = useState<number>(500);
+  const [amount, setAmount] = useState<number | ''>('');
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
     try {
       const [payList, custList] = await Promise.all([
-        api.get('/payments', { paymentMethod: methodFilter || undefined }),
-        api.get('/parties/customers'),
+        api.get('/payments', { paymentMethod: methodFilter || undefined, limit: 100 }),
+        api.get('/parties/customers', { limit: 100 }),
       ]);
-      setPayments(payList.payments || payList || []);
-      const custs = custList.customers || custList || [];
-      setCustomers(custs);
-      if (custs.length > 0 && !customerId) {
-        setCustomerId(custs[0].id);
-      }
-    } catch (err) {
-      console.error('Failed to load payments:', err);
+      setPayments(asList(payList, 'payments'));
+      setCustomers(asList(custList, 'customers'));
+    } catch (err: any) {
+      setLoadError(err.message);
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, [methodFilter]);
 
   useEffect(() => {
     loadData();
-  }, [methodFilter]);
+  }, [loadData]);
+
+  const openRecord = () => {
+    setCustomerId('');
+    setPaymentMethod('CASH');
+    setAmount('');
+    setReference('');
+    setNotes('');
+    setIsRecordModalOpen(true);
+  };
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!customerId) {
+      toast.error('Select a customer');
+      return;
+    }
+    setIsSaving(true);
     try {
       await api.post('/payments', {
         customerId,
@@ -53,83 +81,88 @@ export default function PaymentsPage() {
         transactionReference: reference || undefined,
         notes: notes || undefined,
       });
-
-      alert('Manual payment recorded! Customer ledger updated.');
+      toast.success('Payment recorded', 'The customer ledger has been updated.');
       setIsRecordModalOpen(false);
       loadData();
     } catch (err: any) {
-      alert(`Payment failed: ${err.message}`);
+      toast.error('Payment not recorded', err.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
+  const selectedCustomer = customers.find((c) => c.id === customerId);
+
   return (
     <DashboardLayout>
-      <div className="flex flex-col h-full min-h-0 gap-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
-          <div>
-            <h2 className="text-xl font-bold text-fg tracking-tight">Recorded Customer Payments</h2>
-            <p className="text-xs text-fg-subtle mt-1">Manual payment entries for bills and debt settlement</p>
-          </div>
-          <Button variant="primary" onClick={() => setIsRecordModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-1.5" />
-            Record Payment Received
-          </Button>
+      <div className="flex h-full min-h-0 flex-col gap-5">
+        <PageHeader
+          title="Payments"
+          description="Money received from customers against bills and udhaar."
+          actions={
+            <Button onClick={openRecord}>
+              <Plus /> Record payment
+            </Button>
+          }
+        />
+
+        <div className="flex shrink-0 items-end gap-3">
+          <Select
+            label="Payment method"
+            value={methodFilter}
+            onChange={(e) => setMethodFilter(e.target.value)}
+            containerClassName="w-full max-w-xs"
+          >
+            <option value="">All methods</option>
+            {Object.entries(METHOD_LABEL).map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </Select>
         </div>
 
-        {/* Notice on Manual Settlement */}
-        <div className="bg-brand/5 dark:bg-emerald-950/40 border border-brand/20 p-3.5 rounded-xl flex items-center gap-3 text-xs text-brand shrink-0">
-          <AlertCircle className="w-4 h-4 shrink-0 text-brand" />
-          <span>
-            <strong>Manual Entry Mode:</strong> Payments recorded here reflect external settlement (cash handed over counter, card swiped on terminal, or verified counter UPI scan). Bill Pro does not initiate online transactions or store banking credentials.
-          </span>
-        </div>
-
-        {/* Filter Card */}
-        <Card className="shrink-0">
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-fg-subtle font-medium">Filter by Method:</span>
-            <select
-              value={methodFilter}
-              onChange={(e) => setMethodFilter(e.target.value)}
-              className="bg-surface-2 border border-border rounded-lg px-3 py-1.5 text-xs text-fg"
-            >
-              <option value="">All Methods</option>
-              <option value="CASH">Cash</option>
-              <option value="UPI">UPI</option>
-              <option value="CARD">Card</option>
-              <option value="BANK_TRANSFER">Bank Transfer</option>
-              <option value="CHEQUE">Cheque</option>
-            </select>
-          </div>
-        </Card>
-
-        {/* Payments Table */}
-        <div className="flex-1 min-h-0">
-          {payments.length === 0 ? (
-            <Card className="h-full flex items-center justify-center text-fg-subtle text-sm">No payment records found.</Card>
+        <div className="min-h-0 flex-1">
+          {isLoading ? (
+            <TableSkeleton cols={6} />
+          ) : loadError ? (
+            <ErrorState message={loadError} onRetry={loadData} />
+          ) : payments.length === 0 ? (
+            <EmptyState
+              icon={CreditCard}
+              title="No payments yet"
+              description="Payments taken at the POS and udhaar settlements will appear here."
+              action={
+                <Button variant="secondary" onClick={openRecord}>
+                  <Plus /> Record payment
+                </Button>
+              }
+            />
           ) : (
             <Table>
               <Thead>
                 <Tr>
-                  <Th>Date & Time</Th>
+                  <Th>Date</Th>
                   <Th>Customer</Th>
-                  <Th>Payment Method</Th>
-                  <Th>Amount Received</Th>
-                  <Th>Reference #</Th>
-                  <Th>Invoice #</Th>
+                  <Th>Method</Th>
+                  <Th numeric>Amount</Th>
+                  <Th>Reference</Th>
+                  <Th>Invoice</Th>
                 </Tr>
               </Thead>
               <Tbody>
                 {payments.map((p) => (
                   <Tr key={p.id}>
-                    <Td className="text-xs">{formatDate(p.paymentDate)}</Td>
-                    <Td className="font-semibold text-fg">{p.customer?.name || 'Walk-in Retail'}</Td>
+                    <Td>{formatDate(p.paymentDate)}</Td>
+                    <Td className="font-medium text-fg">{p.customer?.name || 'Walk-in customer'}</Td>
                     <Td>
-                      <Badge variant="info">{p.paymentMethod}</Badge>
+                      <Badge variant="neutral">{METHOD_LABEL[p.paymentMethod] || p.paymentMethod}</Badge>
                     </Td>
-                    <Td className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(p.amount)}</Td>
-                    <Td className="font-mono text-xs">{p.transactionReference || '-'}</Td>
-                    <Td className="font-mono text-xs text-brand">{p.invoice?.invoiceNumber || '-'}</Td>
+                    <Td numeric className={Number(p.amount) < 0 ? 'font-medium text-danger' : 'font-medium text-fg'}>
+                      {formatCurrency(p.amount)}
+                    </Td>
+                    <Td className="font-mono text-xs">{p.transactionReference || '—'}</Td>
+                    <Td className="font-mono text-xs">{p.invoice?.invoiceNumber || '—'}</Td>
                   </Tr>
                 ))}
               </Tbody>
@@ -138,67 +171,73 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* Record Payment Modal */}
-      <Modal isOpen={isRecordModalOpen} onClose={() => setIsRecordModalOpen(false)} title="Record Customer Payment Received" maxWidth="md">
+      <Modal
+        isOpen={isRecordModalOpen}
+        onClose={() => setIsRecordModalOpen(false)}
+        title="Record payment received"
+        description="For money already received (cash at the counter, card terminal, or a verified UPI/bank transfer)."
+        maxWidth="md"
+      >
         <form onSubmit={handleRecordPayment} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-fg-muted mb-1">Customer Account</label>
-            <select
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-fg"
-            >
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} — Current Due: {formatCurrency(c.currentBalance)}
+          <Select
+            label="Customer"
+            required
+            value={customerId}
+            onChange={(e) => setCustomerId(e.target.value)}
+            hint={selectedCustomer ? `Current due: ${formatCurrency(selectedCustomer.currentBalance)}` : undefined}
+          >
+            <option value="" disabled>
+              Select a customer
+            </option>
+            {customers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+                {c.phone ? ` · ${c.phone}` : ''}
+              </option>
+            ))}
+          </Select>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Select label="Method" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}>
+              {Object.entries(METHOD_LABEL).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
                 </option>
               ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-fg-muted mb-1">Payment Method</label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-fg"
-              >
-                <option value="CASH">Cash</option>
-                <option value="UPI">UPI</option>
-                <option value="CARD">Card</option>
-                <option value="BANK_TRANSFER">Bank Transfer</option>
-                <option value="CHEQUE">Cheque</option>
-              </select>
-            </div>
-
+            </Select>
             <Input
-              label="Amount Received (₹)"
+              label="Amount (₹)"
               type="number"
               step="0.01"
+              min={0.01}
               required
               value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
+              onChange={(e) => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
+              placeholder="0.00"
             />
           </div>
 
           <Input
-            label="Transaction Reference (e.g. UPI UTR / RRN / Auth Code)"
+            label="Reference number"
+            hint="UPI UTR, card approval code, or cheque number."
             value={reference}
             onChange={(e) => setReference(e.target.value)}
-            placeholder="e.g. 628192839182"
           />
+          <Input label="Note" value={notes} onChange={(e) => setNotes(e.target.value)} />
 
-          <Input
-            label="Notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Counter payment for partial clearance"
-          />
+          <div className="flex items-start gap-2 rounded-card border border-info/30 bg-info-soft p-3 text-sm text-fg">
+            <Info className="mt-0.5 size-4 shrink-0 text-info" aria-hidden="true" />
+            Bill Pro only records payments — it does not collect money or store bank details.
+          </div>
 
-          <Button type="submit" variant="primary" size="md" className="w-full mt-4">
-            Record Payment & Deduct Debt
-          </Button>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="secondary" onClick={() => setIsRecordModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" isLoading={isSaving}>
+              Record payment
+            </Button>
+          </div>
         </form>
       </Modal>
     </DashboardLayout>

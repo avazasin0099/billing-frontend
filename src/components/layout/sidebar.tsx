@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
-  Receipt,
+  ReceiptIndianRupee as Receipt,
   ShoppingCart,
   Package,
   Boxes,
@@ -16,45 +16,50 @@ import {
   FileSpreadsheet,
   UserCog,
   Settings,
-  Store,
   ChevronDown,
+  Wifi,
+  WifiOff,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { hasRole, MANAGER_ROLES, useSession } from '@/lib/session';
+import { useOnlineStatus } from '@/lib/use-online';
+import type { UserRole } from '@/types';
+import { IconButton } from '../ui/button';
 
-type NavItem = { name: string; href: string; icon: React.ElementType; highlight?: boolean };
+type NavItem = { name: string; href: string; icon: React.ElementType; roles?: UserRole[] };
 type NavGroup = { id: string; label: string; items: NavItem[] };
 
-// Primary actions pinned to the top (no group).
+// `roles` = who may open the page (mirrors the API's authorize() rules). Omitted = everyone.
 const pinnedItems: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'POS Billing', href: '/billing', icon: ShoppingCart, highlight: true },
+  { name: 'POS Billing', href: '/billing', icon: ShoppingCart },
 ];
 
-// Everything else, organized into collapsible sections.
 const navGroups: NavGroup[] = [
   {
     id: 'sales',
     label: 'Sales',
     items: [
       { name: 'Invoices', href: '/invoices', icon: Receipt },
-      { name: 'Sales Returns', href: '/returns', icon: RotateCcw },
-      { name: 'Recorded Payments', href: '/payments', icon: CreditCard },
+      { name: 'Sales returns', href: '/returns', icon: RotateCcw, roles: MANAGER_ROLES },
+      { name: 'Payments', href: '/payments', icon: CreditCard },
     ],
   },
   {
     id: 'inventory',
     label: 'Inventory',
     items: [
-      { name: 'Items Catalog', href: '/items', icon: Package },
-      { name: 'Inventory & Stock', href: '/inventory', icon: Boxes },
-      { name: 'Purchases', href: '/purchases', icon: Truck },
+      { name: 'Items', href: '/items', icon: Package },
+      { name: 'Stock', href: '/inventory', icon: Boxes },
+      { name: 'Purchases', href: '/purchases', icon: Truck, roles: MANAGER_ROLES },
     ],
   },
   {
     id: 'parties',
     label: 'Parties',
     items: [
-      { name: 'Customers & Udhaar', href: '/customers', icon: Users },
+      { name: 'Customers', href: '/customers', icon: Users },
       { name: 'Suppliers', href: '/suppliers', icon: Building2 },
     ],
   },
@@ -62,71 +67,72 @@ const navGroups: NavGroup[] = [
     id: 'finance',
     label: 'Finance',
     items: [
-      { name: 'Expenses & Cashbook', href: '/expenses', icon: Wallet },
-      { name: 'Reports', href: '/reports', icon: BarChart3 },
-      { name: 'GST Reports (CA)', href: '/gst-reports', icon: FileSpreadsheet },
+      { name: 'Expenses & cash book', href: '/expenses', icon: Wallet, roles: MANAGER_ROLES },
+      { name: 'Reports', href: '/reports', icon: BarChart3, roles: MANAGER_ROLES },
+      { name: 'GST reports', href: '/gst-reports', icon: FileSpreadsheet, roles: MANAGER_ROLES },
     ],
   },
   {
     id: 'admin',
     label: 'Admin',
     items: [
-      { name: 'Staff & Roles', href: '/staff', icon: UserCog },
-      { name: 'Settings & Printer', href: '/settings', icon: Settings },
+      { name: 'Staff & roles', href: '/staff', icon: UserCog, roles: MANAGER_ROLES },
+      { name: 'Settings', href: '/settings', icon: Settings, roles: MANAGER_ROLES },
     ],
   },
 ];
 
-// Flat list kept for any external reference / search.
 export const navigationItems: NavItem[] = [...pinnedItems, ...navGroups.flatMap((g) => g.items)];
 
 const STORAGE_KEY = 'billpro_nav_groups';
+const isHrefActive = (pathname: string, href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
-const isHrefActive = (pathname: string, href: string) =>
-  pathname === href || pathname.startsWith(`${href}/`);
-
-const NavLink: React.FC<{ item: NavItem; active: boolean; indented?: boolean }> = ({
-  item,
-  active,
-  indented,
-}) => {
+const NavLink: React.FC<{ item: NavItem; active: boolean; onNavigate?: () => void }> = ({ item, active, onNavigate }) => {
   const Icon = item.icon;
   return (
     <Link
       to={item.href}
+      onClick={onNavigate}
+      aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group',
-        indented && 'ml-1',
-        active
-          ? 'bg-brand/10 text-brand font-semibold'
-          : 'text-fg-subtle hover:text-fg hover:bg-surface-2',
-        item.highlight && !active && 'text-brand hover:text-brand font-semibold'
+        'relative flex h-9 items-center gap-3 rounded-control px-3 text-sm transition-colors',
+        active ? 'bg-primary-soft font-medium text-accent' : 'text-fg-muted hover:bg-surface-2 hover:text-fg'
       )}
     >
-      <Icon
-        className={cn(
-          'w-4 h-4 transition-transform group-hover:scale-110',
-          active ? 'text-brand' : item.highlight ? 'text-brand' : 'text-fg-subtle'
-        )}
-      />
-      <span>{item.name}</span>
-      {item.highlight && (
-        <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand/10 text-brand border border-brand/30">
-          FAST
-        </span>
-      )}
+      {active && <span className="absolute inset-y-1.5 left-0 w-1 rounded-full bg-primary dark:bg-highlight" aria-hidden="true" />}
+      <Icon className="size-[18px] shrink-0" aria-hidden="true" />
+      <span className="truncate">{item.name}</span>
     </Link>
   );
 };
 
-export const Sidebar: React.FC = () => {
+/** Flat product mark — a solid primary square with a standard icon (no gradient / glow). */
+export const BrandMark: React.FC<{ size?: 'sm' | 'md' }> = ({ size = 'md' }) => (
+  <span
+    className={cn(
+      'flex shrink-0 items-center justify-center rounded-card bg-primary text-highlight',
+      size === 'md' ? 'size-9' : 'size-8'
+    )}
+    aria-hidden="true"
+  >
+    <Receipt className={size === 'md' ? 'size-5' : 'size-4'} />
+  </span>
+);
+
+export const Sidebar: React.FC<{ mobileOpen?: boolean; onClose?: () => void }> = ({ mobileOpen = false, onClose }) => {
   const { pathname } = useLocation();
+  const { role } = useSession();
+  const online = useOnlineStatus();
+
+  const visibleGroups = navGroups
+    .map((g) => ({ ...g, items: g.items.filter((i) => hasRole(role, i.roles)) }))
+    .filter((g) => g.items.length > 0);
 
   const groupIsActive = (group: NavGroup) => group.items.some((i) => isHrefActive(pathname, i.href));
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     const defaults: Record<string, boolean> = {};
-    navGroups.forEach((g) => (defaults[g.id] = true)); // all open on first run
+    navGroups.forEach((g) => (defaults[g.id] = true));
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) return { ...defaults, ...JSON.parse(stored) };
@@ -136,12 +142,9 @@ export const Sidebar: React.FC = () => {
     return defaults;
   });
 
-  // Always reveal the group that contains the current page.
   useEffect(() => {
     const active = navGroups.find(groupIsActive);
-    if (active && !openGroups[active.id]) {
-      setOpenGroups((prev) => ({ ...prev, [active.id]: true }));
-    }
+    if (active && !openGroups[active.id]) setOpenGroups((prev) => ({ ...prev, [active.id]: true }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
@@ -158,77 +161,82 @@ export const Sidebar: React.FC = () => {
   };
 
   return (
-    <aside className="w-64 bg-surface border-r border-border flex flex-col h-full shrink-0 select-none z-30">
-      {/* Brand Header */}
-      <div className="h-16 px-6 border-b border-border flex items-center justify-between">
-        <Link to="/dashboard" className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-emerald-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-            <Store className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="font-bold text-fg text-base tracking-tight leading-none">Bill Pro</h1>
-            <span className="text-[10px] text-brand font-medium uppercase tracking-wider">Retail POS & GST</span>
-          </div>
-        </Link>
-      </div>
+    <>
+      {/* Mobile backdrop */}
+      {mobileOpen && <div className="fixed inset-0 z-30 bg-fg/40 lg:hidden" aria-hidden="true" onClick={onClose} />}
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 overflow-y-auto">
-        {/* Pinned primary actions */}
-        <div className="space-y-1">
-          {pinnedItems.map((item) => (
-            <NavLink key={item.href} item={item} active={isHrefActive(pathname, item.href)} />
-          ))}
+      <aside
+        aria-label="Main navigation"
+        className={cn(
+          'fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col border-r border-border bg-surface transition-transform duration-200 lg:static lg:translate-x-0',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
+        <div className="flex h-14 items-center justify-between gap-3 border-b border-border px-4">
+          <Link to="/dashboard" className="flex items-center gap-2.5 rounded-control" onClick={onClose}>
+            <BrandMark />
+            <span className="leading-tight">
+              <span className="block text-sm font-semibold text-fg">Bill Pro</span>
+              <span className="block text-xs text-fg-subtle">Billing, stock &amp; GST</span>
+            </span>
+          </Link>
+          <IconButton label="Close menu" size="sm" className="lg:hidden" onClick={onClose}>
+            <X />
+          </IconButton>
         </div>
 
-        {/* Collapsible groups */}
-        {navGroups.map((group) => {
-          const isOpen = !!openGroups[group.id];
-          const hasActive = groupIsActive(group);
-          return (
-            <div key={group.id} className="mt-4">
-              <button
-                type="button"
-                onClick={() => toggleGroup(group.id)}
-                aria-expanded={isOpen}
-                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider text-fg-subtle hover:text-fg hover:bg-surface-2 transition-colors"
-              >
-                <span>{group.label}</span>
-                {/* Show a brand dot if the active page lives in a collapsed group */}
-                {!isOpen && hasActive && <span className="w-1.5 h-1.5 rounded-full bg-brand" />}
-                <ChevronDown
-                  className={cn(
-                    'w-3.5 h-3.5 ml-auto transition-transform',
-                    isOpen ? 'rotate-0' : '-rotate-90'
-                  )}
-                />
-              </button>
+        <nav className="flex-1 overflow-y-auto px-3 py-3">
+          <div className="space-y-0.5">
+            {pinnedItems.map((item) => (
+              <NavLink key={item.href} item={item} active={isHrefActive(pathname, item.href)} onNavigate={onClose} />
+            ))}
+          </div>
 
-              {isOpen && (
-                <div className="mt-1 space-y-1">
-                  {group.items.map((item) => (
-                    <NavLink
-                      key={item.href}
-                      item={item}
-                      active={isHrefActive(pathname, item.href)}
-                      indented
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </nav>
+          {visibleGroups.map((group) => {
+            const isOpen = !!openGroups[group.id];
+            const hasActive = groupIsActive(group);
+            return (
+              <div key={group.id} className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.id)}
+                  aria-expanded={isOpen}
+                  className="flex w-full items-center gap-2 rounded-control px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle hover:text-fg"
+                >
+                  <span>{group.label}</span>
+                  {!isOpen && hasActive && <span className="size-1.5 rounded-full bg-primary" aria-label="contains current page" />}
+                  <ChevronDown
+                    className={cn('ml-auto size-4 transition-transform', isOpen ? 'rotate-0' : '-rotate-90')}
+                    aria-hidden="true"
+                  />
+                </button>
+                {isOpen && (
+                  <div className="mt-1 space-y-0.5">
+                    {group.items.map((item) => (
+                      <NavLink key={item.href} item={item} active={isHrefActive(pathname, item.href)} onNavigate={onClose} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </nav>
 
-      {/* Footer Info */}
-      <div className="p-4 border-t border-border text-xs text-fg-subtle flex items-center justify-between">
-        <span>V1.0 (Production)</span>
-        <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          Ready
-        </span>
-      </div>
-    </aside>
+        {/* Real connection state (previously a hard-coded "Ready" indicator) */}
+        <div className="flex items-center gap-2 border-t border-border px-4 py-3 text-xs">
+          {online ? (
+            <>
+              <Wifi className="size-4 text-success" aria-hidden="true" />
+              <span className="text-fg-muted">Connected</span>
+            </>
+          ) : (
+            <>
+              <WifiOff className="size-4 text-warning" aria-hidden="true" />
+              <span className="text-fg-muted">Offline — bills are saved on this device</span>
+            </>
+          )}
+        </div>
+      </aside>
+    </>
   );
 };

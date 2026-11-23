@@ -1,107 +1,58 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { NumberInput } from './number-input';
 
-export const Card: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
+// Form controls live in field.tsx; re-exported here so existing imports keep working.
+export { Input, Select, Textarea, type InputProps } from './field';
+
+export const Card: React.FC<React.HTMLAttributes<HTMLDivElement> & { padded?: boolean }> = ({
   children,
   className,
-  ...props
-}) => {
-  return (
-    <div
-      className={cn(
-        'bg-surface border border-border rounded-xl shadow-sm p-5 text-fg',
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </div>
-  );
-};
-
-export const CardHeader: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
-  children,
-  className,
+  padded = true,
   ...props
 }) => (
-  <div className={cn('flex items-center justify-between pb-4 border-b border-border mb-4', className)} {...props}>
+  <div className={cn('rounded-card border border-border bg-surface text-fg shadow-sm', padded && 'p-5', className)} {...props}>
     {children}
   </div>
 );
 
-export const CardTitle: React.FC<React.HTMLAttributes<HTMLHeadingElement>> = ({
-  children,
-  className,
-  ...props
-}) => (
-  <h3 className={cn('text-lg font-semibold text-fg tracking-tight', className)} {...props}>
+export const CardHeader: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ children, className, ...props }) => (
+  <div className={cn('mb-4 flex items-center justify-between gap-3 border-b border-border pb-4', className)} {...props}>
+    {children}
+  </div>
+);
+
+export const CardTitle: React.FC<React.HTMLAttributes<HTMLHeadingElement>> = ({ children, className, ...props }) => (
+  <h3 className={cn('text-base font-semibold text-fg', className)} {...props}>
     {children}
   </h3>
 );
 
-export const Badge: React.FC<{
-  children: React.ReactNode;
-  variant?: 'success' | 'warning' | 'danger' | 'info' | 'neutral';
-  className?: string;
-}> = ({ children, variant = 'neutral', className }) => {
-  const styles = {
-    success: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20',
-    warning: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20',
-    danger: 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20',
-    info: 'bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-500/20',
-    neutral: 'bg-surface-2 text-fg-muted border-border',
-  };
+export type BadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'primary' | 'highlight';
 
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border',
-        styles[variant],
-        className
-      )}
-    >
-      {children}
-    </span>
-  );
+const badgeStyles: Record<BadgeVariant, string> = {
+  success: 'bg-success-soft text-success border-success/20',
+  warning: 'bg-warning-soft text-warning border-warning/20',
+  danger: 'bg-danger-soft text-danger border-danger/20',
+  info: 'bg-info-soft text-info border-info/20',
+  primary: 'bg-primary-soft text-accent border-accent/20',
+  neutral: 'bg-surface-2 text-fg-muted border-border',
+  highlight: 'bg-highlight text-highlight-fg border-black/10',
 };
 
-export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label?: string;
-  error?: string;
+export const Badge: React.FC<{
+  children: React.ReactNode;
+  variant?: BadgeVariant;
   icon?: React.ReactNode;
-}
-
-export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, icon, className, ...props }, ref) => {
-    const InputTag = props.type === 'number' ? NumberInput : 'input';
-    return (
-      <div className="w-full">
-        {label && (
-          <label className="block text-xs font-medium text-fg-muted mb-1.5">
-            {label}
-          </label>
-        )}
-        <div className="relative">
-          {icon && (
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-fg-subtle">
-              {icon}
-            </div>
-          )}
-          <InputTag
-            ref={ref}
-            className={cn(
-              'w-full bg-surface border border-border rounded-lg px-3.5 py-2 text-sm text-fg placeholder-fg-subtle transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-50 disabled:bg-surface-2',
-              icon && 'pl-10',
-              error && 'border-rose-500 focus:ring-rose-500',
-              className
-            )}
-            {...props}
-          />
-        </div>
-        {error && <p className="mt-1 text-xs text-rose-500">{error}</p>}
-      </div>
-    );
-  }
+  className?: string;
+}> = ({ children, variant = 'neutral', icon, className }) => (
+  <span
+    className={cn(
+      'inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium [&_svg]:size-3.5',
+      badgeStyles[variant],
+      className
+    )}
+  >
+    {icon}
+    {children}
+  </span>
 );
-Input.displayName = 'Input';

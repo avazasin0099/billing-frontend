@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Store, KeyRound, Mail, Lock, ShieldCheck, ArrowRight, UserCircle2 } from 'lucide-react';
+import { KeyRound, Mail, Lock, ArrowRight, CircleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/card';
+import { Tabs } from '@/components/ui/page';
+import { BrandMark } from '@/components/layout/sidebar';
 import { api } from '@/services/api-client';
+
+type LoginMode = 'password' | 'pin';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'password' | 'pin'>('password');
+  const [activeTab, setActiveTab] = useState<LoginMode>('password');
   // Never pre-fill credentials (the demo quick-fill below exists only in dev builds).
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -15,23 +19,26 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  const storeSession = (data: any) => {
+    localStorage.setItem('billpro_token', data.tokens.accessToken);
+    localStorage.setItem('billpro_refresh_token', data.tokens.refreshToken);
+    localStorage.setItem('billpro_user', JSON.stringify(data.user));
+    localStorage.setItem('billpro_shop', JSON.stringify(data.shop));
+    localStorage.setItem('billpro_shop_id', data.shop.id);
+  };
+
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setErrorMessage('');
-
     try {
       const data = await api.post('/auth/login', { identifier, password });
       if (data.tokens?.accessToken) {
-        localStorage.setItem('billpro_token', data.tokens.accessToken);
-        localStorage.setItem('billpro_refresh_token', data.tokens.refreshToken);
-        localStorage.setItem('billpro_user', JSON.stringify(data.user));
-        localStorage.setItem('billpro_shop', JSON.stringify(data.shop));
-        localStorage.setItem('billpro_shop_id', data.shop.id);
+        storeSession(data);
         navigate('/dashboard');
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Login failed. Please check credentials.');
+      setErrorMessage(err.message || 'Login failed. Please check your details.');
     } finally {
       setIsLoading(false);
     }
@@ -40,102 +47,71 @@ export default function LoginPage() {
   const handlePinLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (pin.length < 4) {
-      setErrorMessage('Please enter a valid 4-to-6 digit PIN');
+      setErrorMessage('Enter your 4–6 digit counter PIN.');
+      return;
+    }
+    const shopId = localStorage.getItem('billpro_shop_id');
+    if (!shopId) {
+      setErrorMessage('Sign in with your email or mobile and password once on this device before using a counter PIN.');
       return;
     }
     setErrorMessage('');
-
-    const shopId = localStorage.getItem('billpro_shop_id');
-    if (!shopId) {
-      setErrorMessage('Sign in with email & password once on this device before using Counter PIN.');
-      return;
-    }
-
     setIsLoading(true);
-
     try {
       const data = await api.post('/auth/pin-login', { pin, shopId });
       if (data.tokens?.accessToken) {
-        localStorage.setItem('billpro_token', data.tokens.accessToken);
-        localStorage.setItem('billpro_refresh_token', data.tokens.refreshToken);
-        localStorage.setItem('billpro_user', JSON.stringify(data.user));
-        localStorage.setItem('billpro_shop', JSON.stringify(data.shop));
-        localStorage.setItem('billpro_shop_id', data.shop.id);
-        navigate('/billing'); // Cashiers go straight to billing POS!
+        storeSession(data);
+        navigate('/billing'); // Cashiers go straight to the POS.
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Invalid PIN code');
+      setErrorMessage(err.message || 'Invalid PIN');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleQuickFill = (role: 'owner' | 'manager' | 'cashier') => {
-    if (role === 'owner') {
-      setIdentifier('admin@billpro.local');
-      setPassword('Admin@1234');
-      setPin('1234');
-    } else if (role === 'manager') {
-      setIdentifier('manager@billpro.local');
-      setPassword('Manager@1234');
-      setPin('2345');
-    } else {
-      setIdentifier('cashier@billpro.local');
-      setPassword('Cashier@1234');
-      setPin('3456');
-    }
+    const demo = {
+      owner: ['admin@billpro.local', 'Admin@1234', '1234'],
+      manager: ['manager@billpro.local', 'Manager@1234', '2345'],
+      cashier: ['cashier@billpro.local', 'Cashier@1234', '3456'],
+    }[role];
+    setIdentifier(demo[0]);
+    setPassword(demo[1]);
+    setPin(demo[2]);
   };
 
   return (
-    <div className="min-h-screen bg-surface-2 flex flex-col justify-center items-center p-4 selection:bg-brand/30">
-      <div className="w-full max-w-md">
-        {/* Brand Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 to-emerald-400 shadow-xl shadow-emerald-500/25 mb-3">
-            <Store className="w-7 h-7 text-fg" />
-          </div>
-          <h1 className="text-2xl font-bold text-fg tracking-tight">Bill Pro</h1>
-          <p className="text-sm text-fg-subtle mt-1">Retail Billing, Stock & GST System</p>
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10">
+      <main className="w-full max-w-sm">
+        <div className="mb-6 flex flex-col items-center text-center">
+          <BrandMark />
+          <h1 className="mt-3 text-xl font-semibold text-fg">Sign in to Bill Pro</h1>
+          <p className="mt-1 text-sm text-fg-muted">Billing, stock and GST for your shop</p>
         </div>
 
-        {/* Login Card */}
-        <div className="bg-surface border border-border rounded-2xl shadow-2xl p-6 sm:p-8 backdrop-blur-xl">
-          {/* Tab Selector */}
-          <div className="flex bg-surface-2 p-1 rounded-xl mb-6 border border-border">
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('password');
-                setErrorMessage('');
-              }}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-                activeTab === 'password'
-                  ? 'bg-emerald-600 text-white shadow-md'
-                  : 'text-fg-subtle hover:text-fg'
-              }`}
-            >
-              Password Login
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('pin');
-                setErrorMessage('');
-              }}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                activeTab === 'pin'
-                  ? 'bg-emerald-600 text-white shadow-md'
-                  : 'text-fg-subtle hover:text-fg'
-              }`}
-            >
-              <KeyRound className="w-3.5 h-3.5" />
-              Counter PIN (Fast)
-            </button>
-          </div>
+        <div className="rounded-card border border-border bg-surface p-6 shadow-sm">
+          <Tabs<LoginMode>
+            label="Sign-in method"
+            fullWidth
+            value={activeTab}
+            onChange={(v) => {
+              setActiveTab(v);
+              setErrorMessage('');
+            }}
+            items={[
+              { value: 'password', label: 'Password', icon: Lock },
+              { value: 'pin', label: 'Counter PIN', icon: KeyRound },
+            ]}
+            className="mb-5"
+          />
 
           {errorMessage && (
-            <div className="mb-5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+            <div
+              role="alert"
+              className="mb-4 flex items-start gap-2 rounded-card border border-danger/30 bg-danger-soft p-3 text-sm text-danger"
+            >
+              <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               {errorMessage}
             </div>
           )}
@@ -143,100 +119,79 @@ export default function LoginPage() {
           {activeTab === 'password' ? (
             <form onSubmit={handlePasswordLogin} className="space-y-4">
               <Input
-                label="Email or Phone"
+                label="Email or mobile number"
                 type="text"
                 required
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                icon={<Mail className="w-4 h-4" />}
-                placeholder="you@shop.com or 9820011223"
+                icon={<Mail />}
+                placeholder="you@shop.com or 98200 11223"
+                autoComplete="username"
+                autoFocus
               />
-
               <Input
                 label="Password"
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                icon={<Lock className="w-4 h-4" />}
-                placeholder="••••••••"
+                icon={<Lock />}
+                autoComplete="current-password"
               />
-
-              <Button type="submit" variant="primary" className="w-full mt-2" isLoading={isLoading}>
-                Sign in to Register
-                <ArrowRight className="w-4 h-4 ml-1" />
+              <Button type="submit" size="lg" className="w-full" isLoading={isLoading}>
+                Sign in <ArrowRight />
               </Button>
             </form>
           ) : (
             <form onSubmit={handlePinLogin} className="space-y-4">
-              <div className="text-center mb-2">
-                <p className="text-xs text-fg-subtle">
-                  Enter your cashier shift PIN for fast point-of-sale counter access
-                </p>
-              </div>
-
-              <div className="flex justify-center">
+              <div>
+                <label htmlFor="counter-pin" className="mb-1.5 block text-sm font-medium text-fg">
+                  Counter PIN
+                </label>
                 <input
+                  id="counter-pin"
                   type="password"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
                   maxLength={6}
                   autoFocus
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                  placeholder="••••"
-                  className="w-44 text-center tracking-[0.5em] text-2xl font-mono py-3 bg-surface-2 border border-border rounded-xl text-fg focus:outline-none focus:ring-2 focus:ring-ring"
+                  aria-describedby="counter-pin-hint"
+                  className="h-14 w-full rounded-control border border-border-strong bg-surface text-center font-mono text-2xl tracking-[0.5em] text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40"
                 />
+                <p id="counter-pin-hint" className="mt-1.5 text-xs text-fg-subtle">
+                  4–6 digits, set by the shop owner for this counter.
+                </p>
               </div>
-
-              <Button type="submit" variant="primary" className="w-full mt-4" isLoading={isLoading}>
-                Unlock Counter Shift
+              <Button type="submit" size="lg" className="w-full" isLoading={isLoading}>
+                Start shift <ArrowRight />
               </Button>
             </form>
           )}
 
-          {/* Demo Credentials Quick Switcher — development builds only (never shipped to production) */}
+          {/* Demo credentials — development builds only (never shipped to production) */}
           {import.meta.env.DEV && (
-          <div className="mt-6 pt-5 border-t border-border">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-subtle block mb-2 text-center">
-              Quick Demo Fill
-            </span>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickFill('owner')}
-                className="py-1.5 px-2 bg-surface-2 hover:bg-surface-2 border border-border rounded-lg text-[11px] text-fg-muted transition-colors text-center"
-              >
-                Owner
-                <span className="block text-[9px] text-fg-subtle font-mono">PIN: 1234</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickFill('manager')}
-                className="py-1.5 px-2 bg-surface-2 hover:bg-surface-2 border border-border rounded-lg text-[11px] text-fg-muted transition-colors text-center"
-              >
-                Manager
-                <span className="block text-[9px] text-fg-subtle font-mono">PIN: 2345</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickFill('cashier')}
-                className="py-1.5 px-2 bg-surface-2 hover:bg-surface-2 border border-border rounded-lg text-[11px] text-fg-muted transition-colors text-center"
-              >
-                Cashier
-                <span className="block text-[9px] text-fg-subtle font-mono">PIN: 3456</span>
-              </button>
+            <div className="mt-6 border-t border-border pt-4">
+              <p className="mb-2 text-center text-xs font-medium text-fg-subtle">Development: fill demo login</p>
+              <div className="grid grid-cols-3 gap-2">
+                {(['owner', 'manager', 'cashier'] as const).map((r) => (
+                  <Button key={r} variant="secondary" size="sm" onClick={() => handleQuickFill(r)} className="capitalize">
+                    {r}
+                  </Button>
+                ))}
+              </div>
             </div>
-          </div>
           )}
         </div>
 
-        {/* Footer Signup Link */}
-        <p className="text-center text-xs text-fg-subtle mt-6">
+        <p className="mt-6 text-center text-sm text-fg-muted">
           Setting up a new shop?{' '}
-          <Link to="/signup" className="text-brand hover:text-brand font-medium">
-            Register Business
+          <Link to="/signup" className="font-medium text-accent hover:underline">
+            Register your business
           </Link>
         </p>
-      </div>
+      </main>
     </div>
   );
 }

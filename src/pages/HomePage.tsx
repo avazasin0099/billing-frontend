@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -14,8 +15,8 @@ export default function HomePage() {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen bg-canvas flex items-center justify-center">
-      <div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin"></div>
+    <div className="flex min-h-screen items-center justify-center bg-canvas" role="status" aria-label="Loading">
+      <Loader2 className="size-6 animate-spin text-accent" aria-hidden="true" />
     </div>
   );
 }

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Bill Pro">
+  <rect width="64" height="64" rx="14" fill="#7E38ED"/>
+  <g transform="translate(14 14) scale(1.5)" fill="none" stroke="#C6FF34" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/>
+    <path d="M8 7h8"/>
+    <path d="M12 17.5 8 15h1a4 4 0 0 0 0-8"/>
+    <path d="M8 11h8"/>
+  </g>
+</svg>

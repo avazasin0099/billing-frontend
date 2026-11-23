@@ -1,139 +1,172 @@
-
-import React, { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, Calendar, Download, DollarSign, PieChart, Printer } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { BarChart3, TrendingUp, PieChart, IndianRupee, Banknote, Smartphone, CreditCard, Landmark, FileText, BookUser, CircleEllipsis, Info } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardTitle, Badge, Input } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, Input } from '@/components/ui/card';
 import { StatCard } from '@/components/ui/stat-card';
 import { Button } from '@/components/ui/button';
-import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/modal';
+import { PageHeader, ErrorState } from '@/components/ui/page';
 import { api } from '@/services/api-client';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
+import { localIsoDate } from '@/offline/pending-operations';
+import { useSession } from '@/lib/session';
+
+const TENDER: Record<string, { label: string; Icon: React.ElementType }> = {
+  CASH: { label: 'Cash', Icon: Banknote },
+  UPI: { label: 'UPI', Icon: Smartphone },
+  CARD: { label: 'Card', Icon: CreditCard },
+  BANK_TRANSFER: { label: 'Bank transfer', Icon: Landmark },
+  CHEQUE: { label: 'Cheque', Icon: FileText },
+  CREDIT: { label: 'Credit (udhaar)', Icon: BookUser },
+  OTHER: { label: 'Other', Icon: CircleEllipsis },
+};
 
 export default function ReportsPage() {
+  const { isOwner } = useSession();
   const [salesData, setSalesData] = useState<any>(null);
   const [pnlData, setPnlData] = useState<any>(null);
-  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
-  const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
-  const [isLoading, setIsLoading] = useState(false);
+  const [startDate, setStartDate] = useState(localIsoDate());
+  const [endDate, setEndDate] = useState(localIsoDate());
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const fetchReports = async () => {
+  const rangeError = startDate && endDate && startDate > endDate ? 'Start date must be on or before the end date' : undefined;
+
+  const fetchReports = useCallback(async () => {
+    if (rangeError) return;
     setIsLoading(true);
+    setLoadError(null);
     try {
       const [sales, pnl] = await Promise.all([
-        api.get('/reports/sales', { startDate, endDate }).catch(() => null),
-        api.get('/reports/profit', { startDate, endDate }).catch(() => null),
+        api.get('/reports/sales', { startDate, endDate }),
+        // Profit & loss is owner-only on the server.
+        isOwner ? api.get('/reports/profit', { startDate, endDate }) : Promise.resolve(null),
       ]);
-
-      if (sales) setSalesData(sales);
-      if (pnl) setPnlData(pnl);
-    } catch (err) {
-      console.error('Failed to load reports:', err);
+      setSalesData(sales);
+      setPnlData(pnl);
+    } catch (err: any) {
+      setSalesData(null);
+      setPnlData(null);
+      setLoadError(err.message);
     } finally {
       setIsLoading(false);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOwner]);
 
   useEffect(() => {
     fetchReports();
-  }, []);
+  }, [fetchReports]);
 
-  const handlePrintZReport = () => {
-    window.print();
-  };
+  const collections = Object.entries((salesData?.paymentMethodTotals || {}) as Record<string, number>);
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold text-fg tracking-tight">Business Reports & P&L Analysis</h2>
-            <p className="text-xs text-fg-subtle mt-1">Reconciled financial aggregates, gross margin, and day-end closing</p>
-          </div>
-          <Button variant="secondary" onClick={handlePrintZReport}>
-            <Printer className="w-4 h-4 mr-1.5" />
-            Print Day-End Z-Report
-          </Button>
-        </div>
+        <PageHeader title="Reports" description="Sales, collections and profit for any date range." />
 
-        {/* Date Filter Bar */}
         <Card>
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-            <div className="sm:col-span-5">
-              <Input
-                label="Start Date"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
-            <div className="sm:col-span-5">
-              <Input
-                label="End Date"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <Button variant="primary" className="w-full" onClick={fetchReports} isLoading={isLoading}>
-                Update Reports
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              fetchReports();
+            }}
+            className="grid grid-cols-1 items-start gap-3 sm:grid-cols-12"
+          >
+            <Input
+              label="From"
+              type="date"
+              value={startDate}
+              max={localIsoDate()}
+              onChange={(e) => setStartDate(e.target.value)}
+              containerClassName="sm:col-span-4"
+              error={rangeError}
+            />
+            <Input label="To" type="date" value={endDate} max={localIsoDate()} onChange={(e) => setEndDate(e.target.value)} containerClassName="sm:col-span-4" />
+            <div className="flex gap-2 sm:col-span-4 sm:pt-[1.625rem]">
+              <Button type="submit" isLoading={isLoading} disabled={!!rangeError}>
+                Show report
               </Button>
             </div>
-          </div>
+          </form>
         </Card>
 
-        {/* Profit & Loss Matrix */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            label="Billed Revenue (Gross)"
-            value={formatCurrency(salesData?.totalBilled || 0)}
-            icon={DollarSign}
-            tone="emerald"
-            footerLeft={`${salesData?.totalInvoices || 0} invoices generated`}
-          />
-          <StatCard
-            label="Cost of Goods Sold"
-            value={formatCurrency(pnlData?.costOfGoodsSold || 0)}
-            icon={PieChart}
-            tone="neutral"
-            footerLeft="Procurement purchase cost"
-          />
-          <StatCard
-            label="Gross Profit Margin"
-            value={formatCurrency(pnlData?.grossProfit || 0)}
-            icon={TrendingUp}
-            tone="emerald"
-            footerLeft={`${pnlData?.grossMarginPercent || 0}% gross margin`}
-          />
-          <StatCard
-            label="Net Operating Profit"
-            value={formatCurrency(pnlData?.netProfit || 0)}
-            icon={BarChart3}
-            tone="brand"
-            footerLeft={`After ${formatCurrency(pnlData?.totalOperatingExpenses || 0)} expenses`}
-          />
-        </div>
-
-        {/* Payment Methods Collection Breakdown */}
-        {salesData?.paymentMethodTotals && (
+        {loadError ? (
           <Card>
-            <CardHeader>
-              <CardTitle>Collections by Payment Channel</CardTitle>
-              <Badge variant="neutral">Verified Counter Ledger</Badge>
-            </CardHeader>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              {Object.entries(salesData.paymentMethodTotals).map(([method, amount]) => (
-                <div key={method} className="bg-surface-2 p-3 rounded-xl border border-border">
-                  <span className="text-[10px] uppercase font-bold text-fg-subtle block mb-1">
-                    {method.replace('_', ' ')}
-                  </span>
-                  <span className="text-base font-bold text-fg">
-                    {formatCurrency(amount as number)}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <ErrorState message={loadError} onRetry={fetchReports} />
           </Card>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard
+                label="Sales (incl. GST)"
+                value={formatCurrency(salesData?.totalBilled || 0)}
+                icon={IndianRupee}
+                tone="primary"
+                isLoading={isLoading}
+                footerLeft={`${salesData?.totalInvoices || 0} bills`}
+              />
+              <StatCard
+                label="GST collected"
+                value={formatCurrency(salesData?.totalTax || 0)}
+                icon={FileText}
+                tone="info"
+                isLoading={isLoading}
+                footerLeft={`Taxable ${formatCurrency(salesData?.totalTaxable || 0)}`}
+              />
+              {isOwner && (
+                <StatCard
+                  label="Gross profit"
+                  value={formatCurrency(pnlData?.grossProfit || 0)}
+                  icon={TrendingUp}
+                  tone="success"
+                  isLoading={isLoading}
+                  footerLeft={`${pnlData?.grossMarginPercent || 0}% margin · cost ${formatCurrency(pnlData?.costOfGoodsSold || 0)}`}
+                />
+              )}
+              {isOwner && (
+                <StatCard
+                  label="Net profit"
+                  value={formatCurrency(pnlData?.netProfit || 0)}
+                  icon={PieChart}
+                  tone={(pnlData?.netProfit || 0) < 0 ? 'danger' : 'success'}
+                  isLoading={isLoading}
+                  footerLeft={`After ${formatCurrency(pnlData?.totalOperatingExpenses || 0)} expenses`}
+                />
+              )}
+              {!isOwner && (
+                <Card className="flex items-start gap-3 sm:col-span-2">
+                  <Info className="mt-0.5 size-5 shrink-0 text-info" aria-hidden="true" />
+                  <p className="text-sm text-fg-muted">Profit and cost figures are visible to the shop owner only.</p>
+                </Card>
+              )}
+            </div>
+
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="size-5 text-fg-subtle" aria-hidden="true" />
+                    Collections by payment method
+                  </CardTitle>
+                  <p className="mt-0.5 text-sm text-fg-muted">Payments recorded on bills dated in this range.</p>
+                </div>
+              </CardHeader>
+              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+                {collections.map(([method, amount]) => {
+                  const t = TENDER[method] || { label: method, Icon: CircleEllipsis };
+                  return (
+                    <li key={method} className="rounded-card border border-border bg-surface-2 p-3">
+                      <div className="mb-1 flex items-center gap-1.5 text-sm text-fg-muted">
+                        <t.Icon className="size-4" aria-hidden="true" />
+                        {t.label}
+                      </div>
+                      <p className="text-base font-semibold text-fg tabular-nums">{formatCurrency(amount)}</p>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          </>
         )}
       </div>
     </DashboardLayout>

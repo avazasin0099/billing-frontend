@@ -2,10 +2,24 @@
 // The owner picks a type (searchable) and then toggles which of these categories to create.
 // Categories are plain strings; the backend persists the chosen ones as managed Category rows.
 
+import {
+  BookOpen,
+  CakeSlice,
+  Pill,
+  Plug,
+  Shirt,
+  ShoppingCart,
+  Sparkles,
+  Store,
+  UtensilsCrossed,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react';
+
 export interface BusinessType {
   id: string;
   label: string;
-  icon: string; // emoji — keeps the picker dependency-free
+  icon: LucideIcon; // standard lucide line icon (no emoji)
   categories: string[];
 }
 
@@ -13,7 +27,7 @@ export const BUSINESS_TYPES: BusinessType[] = [
   {
     id: 'grocery',
     label: 'Grocery / Kirana',
-    icon: '🛒',
+    icon: ShoppingCart,
     categories: [
       'Grocery Staples', 'Rice & Flour', 'Pulses & Dals', 'Spices & Masala', 'Oil & Ghee',
       'Snacks & Namkeen', 'Biscuits & Bakery', 'Beverages', 'Dairy & Eggs', 'Tea & Coffee',
@@ -23,7 +37,7 @@ export const BUSINESS_TYPES: BusinessType[] = [
   {
     id: 'electronics',
     label: 'Electronics & Appliances',
-    icon: '🔌',
+    icon: Plug,
     categories: [
       'Mobiles & Tablets', 'Laptops & Computers', 'TV & Audio', 'Home Appliances',
       'Kitchen Appliances', 'Cables & Chargers', 'Accessories', 'Cameras', 'Smart Devices',
@@ -33,7 +47,7 @@ export const BUSINESS_TYPES: BusinessType[] = [
   {
     id: 'pharmacy',
     label: 'Pharmacy / Medical',
-    icon: '💊',
+    icon: Pill,
     categories: [
       'Prescription (Rx)', 'OTC Medicines', 'Wellness & Supplements', 'Baby Care',
       'Personal Care', 'Surgical & First Aid', 'Ayurvedic', 'Devices & Equipment',
@@ -42,7 +56,7 @@ export const BUSINESS_TYPES: BusinessType[] = [
   {
     id: 'apparel',
     label: 'Apparel & Fashion',
-    icon: '👕',
+    icon: Shirt,
     categories: [
       "Men's Wear", "Women's Wear", 'Kids Wear', 'Footwear', 'Ethnic Wear',
       'Winter Wear', 'Innerwear', 'Bags & Accessories', 'Jewellery',
@@ -51,7 +65,7 @@ export const BUSINESS_TYPES: BusinessType[] = [
   {
     id: 'restaurant',
     label: 'Restaurant / Food',
-    icon: '🍽️',
+    icon: UtensilsCrossed,
     categories: [
       'Starters', 'Main Course', 'Breads', 'Rice & Biryani', 'Chinese', 'South Indian',
       'Beverages', 'Desserts', 'Combos', 'Add-ons',
@@ -60,7 +74,7 @@ export const BUSINESS_TYPES: BusinessType[] = [
   {
     id: 'hardware',
     label: 'Hardware & Paints',
-    icon: '🔧',
+    icon: Wrench,
     categories: [
       'Tools', 'Fasteners', 'Plumbing', 'Electrical', 'Paints', 'Adhesives',
       'Sanitary', 'Safety', 'Building Material',
@@ -69,7 +83,7 @@ export const BUSINESS_TYPES: BusinessType[] = [
   {
     id: 'stationery',
     label: 'Stationery & Books',
-    icon: '📚',
+    icon: BookOpen,
     categories: [
       'Notebooks', 'Pens & Pencils', 'Office Supplies', 'Art & Craft', 'Books',
       'School Supplies', 'Printing & Paper', 'Gifts',
@@ -78,7 +92,7 @@ export const BUSINESS_TYPES: BusinessType[] = [
   {
     id: 'cosmetics',
     label: 'Cosmetics & Beauty',
-    icon: '💄',
+    icon: Sparkles,
     categories: [
       'Skincare', 'Haircare', 'Makeup', 'Fragrances', 'Bath & Body',
       "Men's Grooming", 'Tools & Brushes', 'Beauty Accessories',
@@ -87,7 +101,7 @@ export const BUSINESS_TYPES: BusinessType[] = [
   {
     id: 'hotel',
     label: 'Bakery / Sweets',
-    icon: '🧁',
+    icon: CakeSlice,
     categories: [
       'Cakes & Pastries', 'Sweets & Mithai', 'Cookies', 'Breads', 'Namkeen',
       'Chocolates', 'Dry Fruits', 'Beverages',
@@ -96,7 +110,7 @@ export const BUSINESS_TYPES: BusinessType[] = [
   {
     id: 'general',
     label: 'General Store / Other',
-    icon: '🏪',
+    icon: Store,
     categories: [
       'General', 'Household', 'Personal Care', 'Food & Beverages', 'Stationery', 'Miscellaneous',
     ],

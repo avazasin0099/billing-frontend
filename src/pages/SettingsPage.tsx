@@ -1,53 +1,104 @@
-
-import React, { useState, useEffect } from 'react';
-import { Printer, Save, Store, Sun, Moon, Monitor, Palette } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Printer, Save, Store, Sun, Moon, Monitor, Palette, ReceiptIndianRupee as Receipt, Check } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardTitle, Input } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { PageHeader, ErrorState, Skeleton } from '@/components/ui/page';
+import { toast } from '@/components/ui/toast';
 import { api } from '@/services/api-client';
 import { applyTheme, getStoredTheme, type Theme } from '@/lib/theme';
+import { cn } from '@/lib/utils';
+
+type PrinterWidth = '3inch' | '2inch' | 'a4';
+
+/** Radio-card group: a standard, keyboard-accessible single choice with a visible description. */
+function ChoiceGroup<T extends string>({
+  name,
+  legend,
+  value,
+  onChange,
+  options,
+}: {
+  name: string;
+  legend: string;
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: string; hint: string; Icon: React.ElementType }[];
+}) {
+  return (
+    <fieldset>
+      <legend className="mb-2 text-sm font-medium text-fg">{legend}</legend>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {options.map(({ value: v, label, hint, Icon }) => {
+          const active = value === v;
+          return (
+            <label
+              key={v}
+              className={cn(
+                'relative flex cursor-pointer gap-3 rounded-card border p-3 transition-colors focus-within:ring-2 focus-within:ring-ring',
+                active ? 'border-primary bg-primary-soft' : 'border-border-strong bg-surface hover:bg-surface-2'
+              )}
+            >
+              <input type="radio" name={name} value={v} checked={active} onChange={() => onChange(v)} className="sr-only" />
+              <Icon className={cn('mt-0.5 size-5 shrink-0', active ? 'text-accent' : 'text-fg-subtle')} aria-hidden="true" />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-fg">{label}</span>
+                <span className="block text-xs text-fg-muted">{hint}</span>
+              </span>
+              {active && <Check className="absolute right-3 top-3 size-4 text-accent" aria-hidden="true" />}
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
 
 export default function SettingsPage() {
-  const [shopName, setShopName] = useState('Shree Ganesh Supermarket & Retail');
-  const [phone, setPhone] = useState('022-24381122');
-  const [address, setAddress] = useState('Shop No. 4-6, Station Road, Dadar West, Mumbai 400028');
-  const [gstin, setGstin] = useState('27AAPFU0939F1ZV');
-  const [printerWidth, setPrinterWidth] = useState<'3inch' | '2inch' | 'a4'>('3inch');
+  // Start EMPTY and load the real shop. (Previously these were pre-filled with a demo shop,
+  // and saving without a successful load wrote that fake GSTIN/address onto the real shop.)
+  const [shopName, setShopName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [gstin, setGstin] = useState('');
+  const [printerWidth, setPrinterWidth] = useState<PrinterWidth>('3inch');
   const [enableNegativeStock, setEnableNegativeStock] = useState(false);
   const [invoicePrefix, setInvoicePrefix] = useState('INV');
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [theme, setTheme] = useState<Theme>(getStoredTheme());
+
+  const load = () => {
+    setIsLoading(true);
+    setLoadError(null);
+    api
+      .get('/staff/settings')
+      .then((shop) => {
+        setShopName(shop?.name || '');
+        setPhone(shop?.phone || '');
+        setAddress(shop?.address || '');
+        setGstin(shop?.gstin || '');
+        setPrinterWidth(shop?.settings?.thermalPrinterWidth || '3inch');
+        setEnableNegativeStock(!!shop?.settings?.enableNegativeStock);
+        setInvoicePrefix(shop?.settings?.invoicePrefix || 'INV');
+      })
+      .catch((err) => setLoadError(err.message))
+      .finally(() => setIsLoading(false));
+  };
+
+  useEffect(load, []);
 
   const chooseTheme = (t: Theme) => {
     setTheme(t);
     applyTheme(t);
   };
 
-  const themeOptions: { value: Theme; label: string; hint: string; Icon: typeof Sun }[] = [
-    { value: 'light', label: 'Light', hint: 'Default — best in bright shops', Icon: Sun },
-    { value: 'dark', label: 'Dark', hint: 'Low-light counters', Icon: Moon },
-    { value: 'system', label: 'System', hint: 'Match the device setting', Icon: Monitor },
-  ];
-
-  useEffect(() => {
-    api.get('/staff/settings').then((shop) => {
-      if (shop) {
-        if (shop.name) setShopName(shop.name);
-        if (shop.phone) setPhone(shop.phone);
-        if (shop.address) setAddress(shop.address);
-        if (shop.gstin) setGstin(shop.gstin);
-        if (shop.settings?.thermalPrinterWidth) setPrinterWidth(shop.settings.thermalPrinterWidth);
-        if (shop.settings?.enableNegativeStock !== undefined) setEnableNegativeStock(shop.settings.enableNegativeStock);
-        if (shop.settings?.invoicePrefix) setInvoicePrefix(shop.settings.invoicePrefix);
-      }
-    }).catch(() => {});
-  }, []);
-
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     try {
-      await api.patch('/staff/settings', {
+      const updated = await api.patch('/staff/settings', {
         name: shopName,
         phone,
         address,
@@ -59,10 +110,26 @@ export default function SettingsPage() {
           roundOffTotal: true,
         },
       });
-
-      alert('Shop settings and printer configuration saved!');
+      // Keep the cached shop (used by the top bar and printed receipts) in sync.
+      try {
+        const cached = JSON.parse(localStorage.getItem('billpro_shop') || '{}');
+        localStorage.setItem(
+          'billpro_shop',
+          JSON.stringify({
+            ...cached,
+            name: updated?.name ?? shopName,
+            phone: updated?.phone ?? phone,
+            address: updated?.address ?? address,
+            gstin: updated?.gstin ?? gstin,
+            settings: updated?.settings ?? cached.settings,
+          })
+        );
+      } catch {
+        /* ignore */
+      }
+      toast.success('Settings saved');
     } catch (err: any) {
-      alert(`Failed to save settings: ${err.message}`);
+      toast.error('Settings not saved', err.message);
     } finally {
       setIsSaving(false);
     }
@@ -70,164 +137,151 @@ export default function SettingsPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 max-w-4xl">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold text-fg tracking-tight">Store Settings & Hardware Configuration</h2>
-            <p className="text-xs text-fg-subtle mt-1">Receipt layout, thermal printer width, and GST details</p>
-          </div>
-        </div>
+      <div className="max-w-4xl space-y-6">
+        <PageHeader title="Settings" description="Shop details printed on bills, printing and billing preferences." />
 
-        {/* Appearance / Theme */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Palette className="w-4 h-4 text-brand" />
-              Appearance
-            </CardTitle>
-          </CardHeader>
-          <div>
-            <label className="block text-xs font-medium text-fg-muted mb-2">Color Theme</label>
-            <div className="grid grid-cols-3 gap-3">
-              {themeOptions.map(({ value, label, hint, Icon }) => {
-                const active = theme === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => chooseTheme(value)}
-                    className={`p-3 rounded-xl border text-left text-xs transition-all ${
-                      active
-                        ? 'bg-brand/20 border-brand text-fg font-bold'
-                        : 'bg-surface-2 border-border text-fg-subtle hover:text-fg'
-                    }`}
-                  >
-                    <Icon className={`w-4 h-4 mb-1.5 ${active ? 'text-brand' : 'text-fg-subtle'}`} />
-                    {label}
-                    <span className="block text-[10px] text-fg-subtle font-normal mt-0.5">{hint}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </Card>
-
-        <form onSubmit={handleSaveSettings} className="space-y-6">
-          {/* Shop Profile */}
+        {loadError && (
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Store className="w-4 h-4 text-brand" />
-                Store Business Profile
-              </CardTitle>
-            </CardHeader>
-            <div className="space-y-4">
-              <Input
-                label="Store Display Name (Printed on Bills)"
-                value={shopName}
-                onChange={(e) => setShopName(e.target.value)}
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Contact Phone"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-                <Input
-                  label="Store GSTIN"
-                  value={gstin}
-                  onChange={(e) => setGstin(e.target.value)}
-                />
-              </div>
-              <Input
-                label="Full Store Address"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-              />
-            </div>
+            <ErrorState message={loadError} onRetry={load} />
           </Card>
+        )}
 
-          {/* Printer & POS Hardware */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Printer className="w-4 h-4 text-brand" />
-                Thermal Printer Configuration
-              </CardTitle>
-            </CardHeader>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-fg-muted mb-2">Default Receipt Format</label>
-                <div className="grid grid-cols-3 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setPrinterWidth('3inch')}
-                    className={`p-3 rounded-xl border text-left text-xs transition-all ${
-                      printerWidth === '3inch'
-                        ? 'bg-brand/20 border-brand text-fg font-bold'
-                        : 'bg-surface-2 border-border text-fg-subtle'
-                    }`}
-                  >
-                    3-Inch (80mm ESC/POS)
-                    <span className="block text-[10px] text-fg-subtle font-normal mt-0.5">Standard retail receipt printer</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPrinterWidth('2inch')}
-                    className={`p-3 rounded-xl border text-left text-xs transition-all ${
-                      printerWidth === '2inch'
-                        ? 'bg-brand/20 border-brand text-fg font-bold'
-                        : 'bg-surface-2 border-border text-fg-subtle'
-                    }`}
-                  >
-                    2-Inch (58mm ESC/POS)
-                    <span className="block text-[10px] text-fg-subtle font-normal mt-0.5">Mobile Bluetooth thermal printer</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPrinterWidth('a4')}
-                    className={`p-3 rounded-xl border text-left text-xs transition-all ${
-                      printerWidth === 'a4'
-                        ? 'bg-brand/20 border-brand text-fg font-bold'
-                        : 'bg-surface-2 border-border text-fg-subtle'
-                    }`}
-                  >
-                    A4 / A5 Tax Invoice
-                    <span className="block text-[10px] text-fg-subtle font-normal mt-0.5">Laser / Inkjet office printer</span>
-                  </button>
+        {!loadError && (
+          <form onSubmit={handleSaveSettings} className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Store className="size-5 text-fg-subtle" aria-hidden="true" />
+                  Shop details
+                </CardTitle>
+              </CardHeader>
+              {isLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-10 w-full" />
+                  <div className="grid grid-cols-2 gap-4">
+                    <Skeleton className="h-10" />
+                    <Skeleton className="h-10" />
+                  </div>
+                  <Skeleton className="h-10 w-full" />
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-4">
+                  <Input
+                    label="Shop name"
+                    hint="Printed at the top of every bill."
+                    required
+                    value={shopName}
+                    onChange={(e) => setShopName(e.target.value)}
+                    placeholder="Your shop name"
+                  />
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Input
+                      label="Phone"
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="Shop phone number"
+                    />
+                    <Input
+                      label="GSTIN"
+                      hint="Leave blank if the shop is not GST-registered."
+                      value={gstin}
+                      onChange={(e) => setGstin(e.target.value.toUpperCase().replace(/\s/g, ''))}
+                      placeholder="15-character GSTIN"
+                      maxLength={15}
+                      className="font-mono uppercase"
+                    />
+                  </div>
+                  <Input
+                    label="Address"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="Shop number, street, area, city, PIN"
+                  />
+                </div>
+              )}
+            </Card>
 
-              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Printer className="size-5 text-fg-subtle" aria-hidden="true" />
+                  Printing
+                </CardTitle>
+              </CardHeader>
+              <ChoiceGroup<PrinterWidth>
+                name="printer-width"
+                legend="Default bill format"
+                value={printerWidth}
+                onChange={setPrinterWidth}
+                options={[
+                  { value: '3inch', label: '80 mm thermal', hint: 'Standard counter receipt printer', Icon: Receipt },
+                  { value: '2inch', label: '58 mm thermal', hint: 'Compact / Bluetooth printer', Icon: Receipt },
+                  { value: 'a4', label: 'A4 tax invoice', hint: 'Laser or inkjet printer', Icon: Printer },
+                ]}
+              />
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Receipt className="size-5 text-fg-subtle" aria-hidden="true" />
+                  Billing
+                </CardTitle>
+              </CardHeader>
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <Input
-                  label="Invoice Number Prefix"
+                  label="Invoice number prefix"
+                  hint="1–10 letters or digits, e.g. INV → INV/2026-27/0001."
                   value={invoicePrefix}
-                  onChange={(e) => setInvoicePrefix(e.target.value.toUpperCase())}
+                  onChange={(e) => setInvoicePrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 10))}
                   placeholder="INV"
                 />
-                <div className="flex flex-col justify-center">
-                  <label className="text-xs font-medium text-fg-muted mb-1">Negative Stock Policy</label>
-                  <label className="flex items-center gap-2 cursor-pointer mt-1">
+                <div>
+                  <p className="mb-1.5 text-sm font-medium text-fg">Stock</p>
+                  <label className="flex cursor-pointer items-start gap-3">
                     <input
                       type="checkbox"
                       checked={enableNegativeStock}
                       onChange={(e) => setEnableNegativeStock(e.target.checked)}
-                      className="rounded border-border bg-surface-2 text-emerald-600"
+                      className="mt-0.5 size-4 rounded border-border-strong accent-[rgb(var(--primary))]"
                     />
-                    <span className="text-xs text-fg-subtle">Allow counter checkout when stock is 0 (overdraft)</span>
+                    <span className="text-sm">
+                      <span className="block text-fg">Allow selling when stock is zero</span>
+                      <span className="block text-xs text-fg-muted">Stock can go negative until the next purchase is recorded.</span>
+                    </span>
                   </label>
                 </div>
               </div>
-            </div>
-          </Card>
+            </Card>
 
-          <Button type="submit" variant="primary" size="lg" isLoading={isSaving} className="w-full">
-            <Save className="w-4 h-4 mr-2" />
-            Save Store Settings
-          </Button>
-        </form>
+            <div className="flex justify-end">
+              <Button type="submit" size="lg" isLoading={isSaving} disabled={isLoading}>
+                <Save /> Save settings
+              </Button>
+            </div>
+          </form>
+        )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Palette className="size-5 text-fg-subtle" aria-hidden="true" />
+              Appearance
+            </CardTitle>
+          </CardHeader>
+          <ChoiceGroup<Theme>
+            name="theme"
+            legend="Theme (this device only)"
+            value={theme}
+            onChange={chooseTheme}
+            options={[
+              { value: 'light', label: 'Light', hint: 'Best in bright shops', Icon: Sun },
+              { value: 'dark', label: 'Dark', hint: 'Low-light counters', Icon: Moon },
+              { value: 'system', label: 'System', hint: 'Follow the device setting', Icon: Monitor },
+            ]}
+          />
+        </Card>
       </div>
     </DashboardLayout>
   );

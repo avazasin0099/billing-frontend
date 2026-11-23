@@ -1,16 +1,24 @@
-
-import React, { useEffect, useState } from 'react';
-import { Search, Receipt, Eye, RotateCcw, Printer, Filter } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Search, Eye, RotateCcw, ReceiptIndianRupee as Receipt } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardTitle, Badge, Input } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Table, Thead, Tbody, Tr, Th, Td, Modal } from '@/components/ui/modal';
-import { api } from '@/services/api-client';
+import { Input, Select } from '@/components/ui/card';
+import { Button, IconButton } from '@/components/ui/button';
+import { Modal } from '@/components/ui/modal';
+import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/table';
+import { PageHeader, EmptyState, ErrorState, TableSkeleton, Skeleton } from '@/components/ui/page';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { toast } from '@/components/ui/toast';
+import { api, asList } from '@/services/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { useSession } from '@/lib/session';
 import { Invoice } from '@/types';
 import { NumberInput } from '@/components/ui/number-input';
 
+const totalTax = (inv: Partial<Invoice>) =>
+  Number(inv.cgstAmount || 0) + Number(inv.sgstAmount || 0) + Number(inv.igstAmount || 0) + Number(inv.cessAmount || 0);
+
 export default function InvoicesPage() {
+  const { isManager } = useSession();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [search, setSearch] = useState('');
   const [paymentStatus, setPaymentStatus] = useState('');
@@ -21,189 +29,174 @@ export default function InvoicesPage() {
   const [returnMode, setReturnMode] = useState<'CASH' | 'LEDGER_CREDIT'>('CASH');
   const [returnNotes, setReturnNotes] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [isReturning, setIsReturning] = useState(false);
 
-  // The list endpoint omits line items; fetch the full invoice (with lines) by id.
   const fetchFullInvoice = async (inv: Invoice): Promise<Invoice> => {
     try {
-      const full = await api.get(`/invoices/${inv.id}`);
-      return full || inv;
-    } catch (err) {
-      console.error('Failed to load invoice detail:', err);
+      return (await api.get(`/invoices/${inv.id}`)) || inv;
+    } catch {
       return inv;
     }
   };
 
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
     try {
-      setIsLoading(true);
-      const data = await api.get('/invoices', { search, paymentStatus });
-      setInvoices(data.invoices || data || []);
-    } catch (err) {
-      console.error('Failed to load invoices:', err);
+      const data = await api.get('/invoices', { search, paymentStatus, limit: 100 });
+      setInvoices(asList(data, 'invoices'));
+    } catch (err: any) {
+      setLoadError(err.message);
     } finally {
       setIsLoading(false);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentStatus]);
 
   useEffect(() => {
     fetchInvoices();
-  }, [paymentStatus]);
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchInvoices();
-  };
+  }, [fetchInvoices]);
 
   const handleViewInvoice = async (inv: Invoice) => {
-    setSelectedInvoice(inv); // show header immediately
+    setSelectedInvoice(inv);
     setIsDetailModalOpen(true);
     setDetailLoading(true);
-    const full = await fetchFullInvoice(inv);
-    setSelectedInvoice(full);
+    setSelectedInvoice(await fetchFullInvoice(inv));
     setDetailLoading(false);
   };
 
   const handleOpenReturnModal = async (inv: Invoice) => {
+    // Reset first so the previous invoice's lines never flash in the dialog.
+    setSelectedInvoice({ ...inv, lines: [] });
+    setReturnQty({});
+    setReturnMode('CASH');
+    setReturnNotes('');
     setIsReturnModalOpen(true);
     setDetailLoading(true);
     const full = await fetchFullInvoice(inv);
     setSelectedInvoice(full);
-    const initialQty: Record<string, number> = {};
-    full.lines?.forEach((l) => {
-      initialQty[l.itemId] = 0;
-    });
-    setReturnQty(initialQty);
+    const initial: Record<string, number> = {};
+    full.lines?.forEach((l) => (initial[l.itemId] = 0));
+    setReturnQty(initial);
     setDetailLoading(false);
   };
 
   const handleProcessReturn = async () => {
     if (!selectedInvoice) return;
     const itemsToReturn = Object.entries(returnQty)
-      .filter(([_, qty]) => qty > 0)
+      .filter(([, qty]) => qty > 0)
       .map(([itemId, quantity]) => ({ itemId, quantity }));
-
     if (itemsToReturn.length === 0) {
-      alert('Please specify quantity to return for at least one item');
+      toast.error('Enter a quantity for at least one item');
       return;
     }
-
+    setIsReturning(true);
     try {
       await api.post(`/invoices/${selectedInvoice.id}/returns`, {
         items: itemsToReturn,
         refundMode: returnMode,
         notes: returnNotes,
       });
-      alert('Sales return and credit note processed successfully!');
+      toast.success('Return processed', 'A credit note was issued and stock was added back.');
       setIsReturnModalOpen(false);
       fetchInvoices();
     } catch (err: any) {
-      alert(`Return failed: ${err.message}`);
+      toast.error('Return not processed', err.message);
+    } finally {
+      setIsReturning(false);
     }
   };
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col h-full min-h-0 gap-6">
-        {/* Header Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
-          <div>
-            <h2 className="text-xl font-bold text-fg tracking-tight">Sales Invoices</h2>
-            <p className="text-xs text-fg-subtle mt-1">Audit log of all counter and tax invoices</p>
-          </div>
-        </div>
+      <div className="flex h-full min-h-0 flex-col gap-5">
+        <PageHeader title="Invoices" description="Every bill issued at the counter, with payment status." />
 
-        {/* Filters Card */}
-        <Card className="shrink-0">
-          <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-            <div className="sm:col-span-8">
-              <Input
-                placeholder="Search invoice number (e.g. INV/2026-27/0001)..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                icon={<Search className="w-4 h-4" />}
-              />
-            </div>
-            <div className="sm:col-span-3">
-              <select
-                value={paymentStatus}
-                onChange={(e) => setPaymentStatus(e.target.value)}
-                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">All Payment Statuses</option>
-                <option value="PAID">Paid</option>
-                <option value="PARTIALLY_PAID">Partially Paid</option>
-                <option value="UNPAID">Unpaid / Credit</option>
-              </select>
-            </div>
-            <div className="sm:col-span-1">
-              <Button type="submit" variant="primary" className="w-full">
-                Filter
-              </Button>
-            </div>
-          </form>
-        </Card>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            fetchInvoices();
+          }}
+          className="grid shrink-0 grid-cols-1 items-end gap-3 sm:grid-cols-12"
+        >
+          <Input
+            label="Invoice number"
+            containerClassName="sm:col-span-6"
+            placeholder="e.g. INV/2026-27/0001"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            icon={<Search />}
+          />
+          <Select
+            label="Payment status"
+            containerClassName="sm:col-span-4"
+            value={paymentStatus}
+            onChange={(e) => setPaymentStatus(e.target.value)}
+          >
+            <option value="">All statuses</option>
+            <option value="PAID">Paid</option>
+            <option value="PARTIALLY_PAID">Partially paid</option>
+            <option value="UNPAID">Unpaid</option>
+          </Select>
+          <Button type="submit" variant="secondary" className="sm:col-span-2">
+            Search
+          </Button>
+        </form>
 
-        {/* Invoices Table */}
-        <div className="flex-1 min-h-0">
+        <div className="min-h-0 flex-1">
           {isLoading ? (
-            <Card className="h-full flex items-center justify-center text-fg-subtle text-sm">Loading invoices…</Card>
+            <TableSkeleton cols={7} />
+          ) : loadError ? (
+            <ErrorState message={loadError} onRetry={fetchInvoices} />
           ) : invoices.length === 0 ? (
-            <Card className="h-full flex items-center justify-center text-fg-subtle text-sm">No invoices match your filter criteria.</Card>
+            <EmptyState
+              icon={Receipt}
+              title={search || paymentStatus ? 'No invoices match these filters' : 'No invoices yet'}
+              description={search || paymentStatus ? 'Try a different number or status.' : 'Bills issued from the POS will appear here.'}
+            />
           ) : (
             <Table>
               <Thead>
                 <Tr>
-                  <Th>Invoice #</Th>
+                  <Th>Invoice</Th>
                   <Th>Date</Th>
                   <Th>Customer</Th>
-                  <Th>Taxable Value</Th>
-                  <Th>Tax (GST)</Th>
-                  <Th>Bill Total</Th>
-                  <Th>Payment Status</Th>
-                  <Th className="text-right">Actions</Th>
+                  <Th numeric>Taxable</Th>
+                  <Th numeric>GST</Th>
+                  <Th numeric>Total</Th>
+                  <Th>Status</Th>
+                  <Th>
+                    <span className="sr-only">Actions</span>
+                  </Th>
                 </Tr>
               </Thead>
               <Tbody>
                 {invoices.map((inv) => (
                   <Tr key={inv.id}>
-                    <Td className="font-mono font-bold text-fg">{inv.invoiceNumber}</Td>
+                    <Td className="font-mono font-medium text-fg">{inv.invoiceNumber}</Td>
                     <Td>{formatDate(inv.invoiceDate)}</Td>
-                    <Td>{inv.customer?.name || 'Walk-in Retail'}</Td>
-                    <Td>{formatCurrency(inv.taxableAmount)}</Td>
-                    <Td>{formatCurrency(Number(inv.cgstAmount) + Number(inv.sgstAmount) + Number(inv.igstAmount))}</Td>
-                    <Td className="font-bold text-fg">{formatCurrency(inv.totalAmount)}</Td>
-                    <Td>
-                      <Badge
-                        variant={
-                          inv.paymentStatus === 'PAID'
-                            ? 'success'
-                            : inv.paymentStatus === 'PARTIALLY_PAID'
-                            ? 'warning'
-                            : 'danger'
-                        }
-                      >
-                        {inv.paymentStatus}
-                      </Badge>
+                    <Td>{inv.customer?.name || 'Walk-in customer'}</Td>
+                    <Td numeric>{formatCurrency(inv.taxableAmount)}</Td>
+                    <Td numeric>{formatCurrency(totalTax(inv))}</Td>
+                    <Td numeric className="font-medium text-fg">
+                      {formatCurrency(inv.totalAmount)}
                     </Td>
-                    <Td className="text-right space-x-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleViewInvoice(inv)}
-                        title="View Line Items"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleOpenReturnModal(inv)}
-                        title="Process Return / Credit Note"
-                        className="hover:text-amber-600 dark:hover:text-amber-400"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </Button>
+                    <Td>
+                      <StatusBadge status={inv.paymentStatus} />
+                    </Td>
+                    <Td className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <IconButton size="sm" label={`View ${inv.invoiceNumber}`} onClick={() => handleViewInvoice(inv)}>
+                          <Eye />
+                        </IconButton>
+                        {isManager && (
+                          <IconButton size="sm" label={`Return items from ${inv.invoiceNumber}`} onClick={() => handleOpenReturnModal(inv)}>
+                            <RotateCcw />
+                          </IconButton>
+                        )}
+                      </div>
                     </Td>
                   </Tr>
                 ))}
@@ -213,127 +206,168 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      {/* Invoice Detail Modal */}
+      {/* Invoice detail */}
       <Modal
         isOpen={isDetailModalOpen}
         onClose={() => setIsDetailModalOpen(false)}
-        title={`Invoice ${selectedInvoice?.invoiceNumber}`}
-        maxWidth="lg"
+        title={`Invoice ${selectedInvoice?.invoiceNumber || ''}`}
+        description={selectedInvoice ? `${formatDate(selectedInvoice.invoiceDate)} · ${selectedInvoice.customer?.name || 'Walk-in customer'}` : undefined}
+        maxWidth="2xl"
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-2 text-xs text-fg-muted bg-surface-2 p-3 rounded-xl border border-border">
-            <div>
-              <span className="text-fg-subtle block">Customer</span>
-              <span className="font-semibold text-fg">{selectedInvoice?.customer?.name || 'Walk-in Retail'}</span>
-            </div>
-            <div className="text-right">
-              <span className="text-fg-subtle block">Date</span>
-              <span>{formatDate(selectedInvoice?.invoiceDate)}</span>
-            </div>
+          <div className="flex items-center gap-2">
+            <StatusBadge status={selectedInvoice?.paymentStatus} />
+            {selectedInvoice?.customer?.gstin && (
+              <span className="text-sm text-fg-muted">
+                GSTIN <span className="font-mono">{selectedInvoice.customer.gstin}</span>
+              </span>
+            )}
           </div>
 
-          <Table>
-            <Thead>
-              <Tr>
-                <Th>Item</Th>
-                <Th>Qty</Th>
-                <Th>Price</Th>
-                <Th>GST</Th>
-                <Th className="text-right">Total</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {detailLoading ? (
+          {detailLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-9 w-full" />
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <Thead>
                 <Tr>
-                  <Td colSpan={5} className="text-center text-fg-subtle py-6">
-                    Loading items…
-                  </Td>
+                  <Th>Item</Th>
+                  <Th>HSN</Th>
+                  <Th numeric>Qty</Th>
+                  <Th numeric>Rate</Th>
+                  <Th numeric>GST</Th>
+                  <Th numeric>Amount</Th>
                 </Tr>
-              ) : selectedInvoice?.lines?.length ? (
-                selectedInvoice.lines.map((line) => (
-                  <Tr key={line.id}>
-                    <Td className="font-medium text-fg">{line.itemName}</Td>
-                    <Td>{Number(line.quantity).toFixed(2)}</Td>
-                    <Td>{formatCurrency(line.unitPrice)}</Td>
-                    <Td>{line.gstRate}%</Td>
-                    <Td className="text-right font-bold text-fg">{formatCurrency(line.lineTotal)}</Td>
+              </Thead>
+              <Tbody>
+                {selectedInvoice?.lines?.length ? (
+                  selectedInvoice.lines.map((line) => (
+                    <Tr key={line.id}>
+                      <Td className="font-medium text-fg">{line.itemName}</Td>
+                      <Td className="font-mono text-xs">{line.hsnCode || '—'}</Td>
+                      <Td numeric>{Number(line.quantity)}</Td>
+                      <Td numeric>{formatCurrency(line.unitPrice)}</Td>
+                      <Td numeric>{Number(line.gstRate)}%</Td>
+                      <Td numeric className="font-medium text-fg">
+                        {formatCurrency(line.lineTotal)}
+                      </Td>
+                    </Tr>
+                  ))
+                ) : (
+                  <Tr>
+                    <Td colSpan={6} className="py-6 text-center">
+                      No line items on this invoice.
+                    </Td>
                   </Tr>
-                ))
-              ) : (
-                <Tr>
-                  <Td colSpan={5} className="text-center text-fg-subtle py-6">
-                    No items found for this invoice.
-                  </Td>
-                </Tr>
-              )}
-            </Tbody>
-          </Table>
+                )}
+              </Tbody>
+            </Table>
+          )}
 
-          <div className="flex justify-between items-center pt-3 border-t border-border font-bold text-sm">
-            <span>Bill Total:</span>
-            <span className="text-brand text-base">{formatCurrency(selectedInvoice?.totalAmount)}</span>
-          </div>
+          {selectedInvoice && (
+            <dl className="ml-auto w-full max-w-xs space-y-1 text-sm">
+              <div className="flex justify-between text-fg-muted">
+                <dt>Taxable</dt>
+                <dd className="tabular-nums">{formatCurrency(selectedInvoice.taxableAmount)}</dd>
+              </div>
+              <div className="flex justify-between text-fg-muted">
+                <dt>GST</dt>
+                <dd className="tabular-nums">{formatCurrency(totalTax(selectedInvoice))}</dd>
+              </div>
+              <div className="flex justify-between border-t border-border pt-1 font-semibold text-fg">
+                <dt>Total</dt>
+                <dd className="tabular-nums">{formatCurrency(selectedInvoice.totalAmount)}</dd>
+              </div>
+              <div className="flex justify-between text-fg-muted">
+                <dt>Paid</dt>
+                <dd className="tabular-nums">{formatCurrency(selectedInvoice.paidAmount)}</dd>
+              </div>
+              {Number(selectedInvoice.balanceAmount) > 0 && (
+                <div className="flex justify-between font-medium text-danger">
+                  <dt>Balance due</dt>
+                  <dd className="tabular-nums">{formatCurrency(selectedInvoice.balanceAmount)}</dd>
+                </div>
+              )}
+            </dl>
+          )}
         </div>
       </Modal>
 
-      {/* Sales Return Modal */}
+      {/* Sales return */}
       <Modal
         isOpen={isReturnModalOpen}
         onClose={() => setIsReturnModalOpen(false)}
-        title={`Process Sales Return (${selectedInvoice?.invoiceNumber})`}
-        maxWidth="md"
+        title={`Return items · ${selectedInvoice?.invoiceNumber || ''}`}
+        description="Returned goods are added back to stock and a credit note is issued."
+        maxWidth="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setIsReturnModalOpen(false)} disabled={isReturning}>
+              Cancel
+            </Button>
+            <Button onClick={handleProcessReturn} isLoading={isReturning} disabled={detailLoading}>
+              Issue credit note
+            </Button>
+          </>
+        }
       >
         <div className="space-y-4">
-          <p className="text-xs text-fg-subtle">
-            Select the items and quantities returned. Goods will be restocked automatically.
-          </p>
+          {detailLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : (
+            <ul className="divide-y divide-border overflow-hidden rounded-card border border-border">
+              {selectedInvoice?.lines?.map((line: any) => {
+                const maxQty = Math.max(0, Number(line.quantity) - Number(line.returnedQuantity || 0));
+                return (
+                  <li key={line.id} className="flex items-center justify-between gap-3 p-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-fg">{line.itemName}</p>
+                      <p className="text-xs text-fg-muted">
+                        Sold {Number(line.quantity)} × {formatCurrency(line.unitPrice)}
+                        {Number(line.returnedQuantity) > 0 && ` · already returned ${Number(line.returnedQuantity)}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label htmlFor={`inv-ret-${line.id}`} className="text-sm text-fg-muted">
+                        Return
+                      </label>
+                      <NumberInput
+                        id={`inv-ret-${line.id}`}
+                        min={0}
+                        max={maxQty}
+                        value={returnQty[line.itemId] || 0}
+                        onChange={(e) =>
+                          setReturnQty({
+                            ...returnQty,
+                            [line.itemId]: Math.min(maxQty, Math.max(0, Number(e.target.value) || 0)),
+                          })
+                        }
+                        className="h-9 w-20 rounded-control border border-border-strong bg-surface px-2 text-center text-sm font-semibold text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40"
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
 
-          <div className="space-y-2">
-            {selectedInvoice?.lines?.map((line) => (
-              <div key={line.id} className="flex items-center justify-between p-2.5 bg-surface-2 rounded-xl border border-border text-xs">
-                <div>
-                  <div className="font-semibold text-fg">{line.itemName}</div>
-                  <div className="text-fg-subtle">Bought: {line.quantity} • {formatCurrency(line.unitPrice)}/ea</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-fg-subtle">Return:</span>
-                  <NumberInput
-                    type="number"
-                    min={0}
-                    max={line.quantity}
-                    value={returnQty[line.itemId] || 0}
-                    onChange={(e) =>
-                      setReturnQty({ ...returnQty, [line.itemId]: Math.min(line.quantity, Number(e.target.value)) })
-                    }
-                    className="w-16 bg-surface border border-border rounded px-2 py-1 text-fg text-center font-bold"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-fg-muted block mb-1">Refund Settlement Mode</label>
-            <select
-              value={returnMode}
-              onChange={(e) => setReturnMode(e.target.value as any)}
-              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-fg"
-            >
-              <option value="CASH">Cash Drawer Refund</option>
-              <option value="LEDGER_CREDIT">Customer Account Credit (Udhaar deduction)</option>
-            </select>
-          </div>
-
+          <Select label="Refund as" value={returnMode} onChange={(e) => setReturnMode(e.target.value as any)}>
+            <option value="CASH">Cash refund from drawer</option>
+            <option value="LEDGER_CREDIT">Credit to customer's udhaar account</option>
+          </Select>
           <Input
-            label="Return Reason"
+            label="Reason"
             value={returnNotes}
             onChange={(e) => setReturnNotes(e.target.value)}
-            placeholder="e.g. Expired seal, customer change of mind"
+            placeholder="e.g. Damaged seal, wrong size"
           />
-
-          <Button variant="primary" size="md" className="w-full mt-3" onClick={handleProcessReturn}>
-            Confirm Return & Issue Credit Note
-          </Button>
         </div>
       </Modal>
     </DashboardLayout>

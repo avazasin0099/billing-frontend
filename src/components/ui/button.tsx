@@ -1,74 +1,94 @@
 import React from 'react';
+import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'link' | 'outline' | 'success';
+export type ButtonSize = 'sm' | 'md' | 'lg';
+
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost' | 'success';
-  size?: 'sm' | 'md' | 'lg';
+  variant?: ButtonVariant;
+  size?: ButtonSize;
   isLoading?: boolean;
 }
 
-export const Button: React.FC<ButtonProps> = ({
-  children,
-  className,
-  variant = 'primary',
-  size = 'md',
-  isLoading = false,
-  disabled,
-  ...props
-}) => {
-  const baseStyles =
-    'inline-flex items-center justify-center font-medium rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-canvas disabled:opacity-50 disabled:cursor-not-allowed select-none active:scale-[0.98]';
+const base =
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium rounded-control ' +
+  'transition-colors duration-150 select-none ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface ' +
+  'disabled:opacity-50 disabled:pointer-events-none [&_svg]:shrink-0';
 
-  const variants = {
-    primary:
-      'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow-emerald-500/25 focus:ring-ring',
-    secondary:
-      'bg-surface hover:bg-surface-2 text-fg shadow-sm focus:ring-ring border border-border',
-    outline:
-      'bg-transparent hover:bg-surface-2 text-fg-muted hover:text-fg border border-border focus:ring-ring',
-    danger:
-      'bg-rose-600 hover:bg-rose-700 text-white shadow-sm focus:ring-rose-500',
-    success:
-      'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm focus:ring-emerald-500',
-    ghost:
-      'bg-transparent hover:bg-surface-2 text-fg-subtle hover:text-fg focus:ring-ring',
-  };
+const variants: Record<ButtonVariant, string> = {
+  primary: 'bg-primary text-primary-fg hover:bg-primary-hover shadow-sm',
+  secondary: 'bg-surface text-fg border border-border-strong hover:bg-surface-2 shadow-sm',
+  // `outline` kept as an alias of secondary for existing call sites.
+  outline: 'bg-surface text-fg border border-border-strong hover:bg-surface-2',
+  ghost: 'bg-transparent text-fg-muted hover:bg-surface-2 hover:text-fg',
+  danger: 'bg-danger text-white hover:bg-danger-hover shadow-sm',
+  // `success` is a status colour, not an action colour — map it to the primary action.
+  success: 'bg-primary text-primary-fg hover:bg-primary-hover shadow-sm',
+  link: 'bg-transparent text-accent underline-offset-4 hover:underline px-0 h-auto text-sm [&_svg]:size-4',
+};
 
-  const sizes = {
-    sm: 'text-xs px-2.5 py-1.5 gap-1.5',
-    md: 'text-sm px-4 py-2 gap-2',
-    lg: 'text-base px-5 py-2.5 gap-2.5',
-  };
+const sizes: Record<ButtonSize, string> = {
+  sm: 'h-8 px-3 text-sm [&_svg]:size-4',
+  md: 'h-10 px-4 text-sm [&_svg]:size-4',
+  lg: 'h-12 px-5 text-base [&_svg]:size-5',
+};
 
-  return (
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ children, className, variant = 'primary', size = 'md', isLoading = false, disabled, ...props }, ref) => (
     <button
-      className={cn(baseStyles, variants[variant], sizes[size], className)}
+      ref={ref}
+      className={cn(base, variants[variant], variant !== 'link' && sizes[size], className)}
       disabled={disabled || isLoading}
+      aria-busy={isLoading || undefined}
       {...props}
     >
-      {isLoading ? (
-        <svg
-          className="animate-spin -ml-1 mr-2 h-4 w-4 text-current"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          ></circle>
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-          ></path>
-        </svg>
-      ) : null}
+      {isLoading && <Loader2 className="animate-spin" aria-hidden="true" />}
       {children}
     </button>
-  );
+  )
+);
+Button.displayName = 'Button';
+
+export interface IconButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label'> {
+  /** Required: icon-only buttons must have an accessible name. Also shown as the tooltip. */
+  label: string;
+  variant?: 'ghost' | 'secondary' | 'danger-ghost';
+  size?: 'sm' | 'md' | 'lg';
+}
+
+const iconVariants = {
+  ghost: 'text-fg-muted hover:bg-surface-2 hover:text-fg',
+  secondary: 'bg-surface text-fg border border-border-strong hover:bg-surface-2',
+  'danger-ghost': 'text-fg-muted hover:bg-danger-soft hover:text-danger',
 };
+
+const iconSizes = {
+  sm: 'size-8 [&_svg]:size-4',
+  md: 'size-10 [&_svg]:size-[18px]',
+  lg: 'size-11 [&_svg]:size-5', // 44px touch target
+};
+
+export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
+  ({ label, variant = 'ghost', size = 'md', className, children, type, title, ...props }, ref) => (
+    <button
+      ref={ref}
+      type={type ?? 'button'}
+      aria-label={label}
+      title={title ?? label}
+      className={cn(
+        'inline-flex items-center justify-center rounded-control transition-colors duration-150 shrink-0',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
+        'disabled:opacity-50 disabled:pointer-events-none',
+        iconVariants[variant],
+        iconSizes[size],
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  )
+);
+IconButton.displayName = 'IconButton';

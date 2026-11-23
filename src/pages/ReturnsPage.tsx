@@ -1,21 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  RotateCcw,
-  Search,
-  CheckCircle2,
-  AlertTriangle,
-  Receipt,
-  ArrowRight,
-  PackageCheck,
-  Calendar,
-  User,
-} from 'lucide-react';
+import { Search, CircleCheck, ReceiptIndianRupee as Receipt, ChevronRight, PackageCheck, Calendar, User, Minus, Plus } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardTitle, Badge, Input } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Table, Thead, Tbody, Tr, Th, Td, Modal } from '@/components/ui/modal';
-import { api } from '@/services/api-client';
+import { Card, CardHeader, CardTitle, Input, Select } from '@/components/ui/card';
+import { Button, IconButton } from '@/components/ui/button';
+import { PageHeader, EmptyState, Skeleton } from '@/components/ui/page';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { toast } from '@/components/ui/toast';
+import { api, asList } from '@/services/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Invoice } from '@/types';
 import { posAudio } from '@/lib/sound';
@@ -27,62 +19,55 @@ export default function ReturnsPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  // Return item quantities: { itemId: quantity }
   const [returnQtys, setReturnQtys] = useState<Record<string, number>>({});
   const [refundMode, setRefundMode] = useState<'CASH' | 'LEDGER_CREDIT'>('CASH');
-  const [returnReason, setReturnReason] = useState('Customer Return');
+  const [returnReason, setReturnReason] = useState('Customer return');
   const [returnNotes, setReturnNotes] = useState('');
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Recent Invoices list for quick pick
   const [recentInvoices, setRecentInvoices] = useState<Invoice[]>([]);
   const [isLoadingRecent, setIsLoadingRecent] = useState(true);
 
   useEffect(() => {
-    const fetchRecent = async () => {
-      try {
-        const res = await api.get('/invoices', { limit: 10 });
-        setRecentInvoices(res.invoices || res || []);
-      } catch (err) {
-        console.error('Failed to load recent invoices:', err);
-      } finally {
-        setIsLoadingRecent(false);
-      }
-    };
-    fetchRecent();
+    api
+      .get('/invoices', { limit: 10 })
+      .then((res) => setRecentInvoices(asList(res, 'invoices')))
+      .catch(() => setRecentInvoices([]))
+      .finally(() => setIsLoadingRecent(false));
   }, []);
 
-  const handleSearchInvoice = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!invoiceNumberQuery.trim()) return;
+  const loadInvoice = async (id: string) => {
+    const detailed = await api.get(`/invoices/${id}`);
+    setFoundInvoice(detailed);
+    const initial: Record<string, number> = {};
+    detailed.lines?.forEach((line: any) => (initial[line.itemId] = 0));
+    setReturnQtys(initial);
+    setReturnNotes('');
+    posAudio.playScanBeep();
+  };
 
+  const handleSearchInvoice = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const q = invoiceNumberQuery.trim();
+    if (!q) return;
     setIsSearching(true);
     setSearchError(null);
     setFoundInvoice(null);
     setSuccessMessage(null);
-
     try {
-      const res = await api.get('/invoices', { search: invoiceNumberQuery.trim() });
-      const invoices: Invoice[] = res.invoices || res || [];
-      if (invoices.length === 0) {
-        setSearchError(`No invoice found matching "${invoiceNumberQuery}"`);
+      const res = await api.get('/invoices', { search: q });
+      const invoices = asList<Invoice>(res, 'invoices');
+      // Prefer an exact invoice-number match over the newest partial match.
+      const match = invoices.find((i) => i.invoiceNumber.toLowerCase() === q.toLowerCase()) || invoices[0];
+      if (!match) {
+        setSearchError(`No invoice found matching "${q}".`);
         posAudio.playErrorBuzz();
       } else {
-        // Fetch detailed invoice with lines
-        const detailed = await api.get(`/invoices/${invoices[0].id}`);
-        setFoundInvoice(detailed);
-        posAudio.playScanBeep();
-
-        // Initialize return quantities to 0
-        const initialQtys: Record<string, number> = {};
-        detailed.lines?.forEach((line: any) => {
-          initialQtys[line.itemId] = 0;
-        });
-        setReturnQtys(initialQtys);
+        await loadInvoice(match.id);
       }
     } catch (err: any) {
-      setSearchError(err.message || 'Failed to search invoice');
+      setSearchError(err.message || 'Could not search invoices.');
       posAudio.playErrorBuzz();
     } finally {
       setIsSearching(false);
@@ -94,30 +79,23 @@ export default function ReturnsPage() {
     setSearchError(null);
     setSuccessMessage(null);
     try {
-      const detailed = await api.get(`/invoices/${inv.id}`);
-      setFoundInvoice(detailed);
-      posAudio.playScanBeep();
-      const initialQtys: Record<string, number> = {};
-      detailed.lines?.forEach((line: any) => {
-        initialQtys[line.itemId] = 0;
-      });
-      setReturnQtys(initialQtys);
+      await loadInvoice(inv.id);
     } catch (err: any) {
       setSearchError(err.message);
     }
   };
 
   const handleQtyChange = (itemId: string, maxQty: number, val: number) => {
-    const clamped = Math.min(maxQty, Math.max(0, val));
+    const clamped = Math.min(maxQty, Math.max(0, Number.isFinite(val) ? val : 0));
     setReturnQtys((prev) => ({ ...prev, [itemId]: clamped }));
   };
 
-  // Calculate estimated refund total
+  // Refund estimate from each line's billed total (includes GST and any discount).
   const estimatedRefund =
-    foundInvoice?.lines?.reduce((sum: number, line: any) => {
+    foundInvoice?.lines?.reduce((sum, line: any) => {
       const qty = returnQtys[line.itemId] || 0;
-      const unitP = Number(line.unitPrice) || 0;
-      return sum + qty * unitP;
+      const perUnit = Number(line.quantity) > 0 ? Number(line.lineTotal) / Number(line.quantity) : 0;
+      return sum + qty * perUnit;
     }, 0) || 0;
 
   const totalItemsToReturn = Object.values(returnQtys).reduce((sum, q) => sum + q, 0);
@@ -125,12 +103,12 @@ export default function ReturnsPage() {
   const handleSubmitReturn = async () => {
     if (!foundInvoice) return;
     const itemsToReturn = Object.entries(returnQtys)
-      .filter(([_, qty]) => qty > 0)
-      .map(([itemId, quantity]) => ({ itemId, quantity }));
+      .filter(([, qty]) => qty > 0)
+      .map(([itemId, quantity]) => ({ itemId, quantity, reason: returnReason }));
 
     if (itemsToReturn.length === 0) {
       posAudio.playErrorBuzz();
-      alert('Please select at least one item quantity to return');
+      toast.error('Select at least one item to return');
       return;
     }
 
@@ -140,21 +118,19 @@ export default function ReturnsPage() {
         items: itemsToReturn,
         refundMode,
         reason: returnReason,
-        notes: returnNotes,
+        notes: [returnReason, returnNotes].filter(Boolean).join(' — '),
       });
-
       posAudio.playSuccessChime();
       setSuccessMessage(
-        `Return processed! Stock replenished and GST Credit Note created successfully for ${formatCurrency(
-          estimatedRefund
-        )}.`
+        `Credit note issued for ${foundInvoice.invoiceNumber}. Stock has been added back (about ${formatCurrency(estimatedRefund)}).`
       );
+      toast.success('Return processed');
       setFoundInvoice(null);
       setInvoiceNumberQuery('');
       setReturnQtys({});
     } catch (err: any) {
       posAudio.playErrorBuzz();
-      alert(`Return failed: ${err.message}`);
+      toast.error('Return not processed', err.message);
     } finally {
       setIsSubmittingReturn(false);
     }
@@ -163,204 +139,135 @@ export default function ReturnsPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold text-fg tracking-tight flex items-center gap-2">
-              <RotateCcw className="w-5 h-5 text-brand" />
-              <span>Sales Returns & GST Credit Notes</span>
-            </h2>
-            <p className="text-xs text-fg-subtle mt-1">
-              Process customer returns, restock inventory automatically, and generate legal Credit Notes
-            </p>
-          </div>
-        </div>
+        <PageHeader
+          title="Sales returns"
+          description="Find the original bill, choose what came back, and issue a GST credit note. Stock is added back automatically."
+        />
 
-        {/* Success Alert Banner */}
         {successMessage && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center gap-3 text-emerald-700 dark:text-emerald-300 text-sm">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span>{successMessage}</span>
+          <div role="status" className="flex items-start gap-3 rounded-card border border-success/30 bg-success-soft p-4 text-sm text-fg">
+            <CircleCheck className="mt-0.5 size-5 shrink-0 text-success" aria-hidden="true" />
+            {successMessage}
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column: Search & Process Return (7 cols) */}
-          <div className="lg:col-span-7 space-y-4">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <div className="space-y-4 lg:col-span-7">
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">Step 1: Locate Invoice by Number or Receipt Barcode</CardTitle>
+                <CardTitle>1. Find the bill</CardTitle>
               </CardHeader>
-              <form onSubmit={handleSearchInvoice} className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-fg-subtle absolute left-3 top-3 pointer-events-none" />
-                  <input
-                    type="text"
-                    value={invoiceNumberQuery}
-                    onChange={(e) => setInvoiceNumberQuery(e.target.value)}
-                    placeholder="Enter invoice # (e.g. INV/2026-27/0001)..."
-                    className="w-full bg-surface border border-border rounded-xl pl-9 pr-3 py-2 text-xs text-fg placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-ring font-mono"
-                  />
-                </div>
-                <Button type="submit" variant="primary" size="md" isLoading={isSearching} className="font-bold">
-                  Find Bill
+              <form onSubmit={handleSearchInvoice} className="flex items-start gap-2">
+                <Input
+                  aria-label="Invoice number"
+                  value={invoiceNumberQuery}
+                  onChange={(e) => setInvoiceNumberQuery(e.target.value)}
+                  placeholder="Invoice number, e.g. INV/2026-27/0001"
+                  icon={<Search />}
+                  className="font-mono"
+                  error={searchError || undefined}
+                />
+                <Button type="submit" isLoading={isSearching}>
+                  Find bill
                 </Button>
               </form>
-
-              {searchError && (
-                <div className="mt-3 p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg flex items-center gap-2 text-xs text-rose-700 dark:text-rose-300">
-                  <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-                  <span>{searchError}</span>
-                </div>
-              )}
             </Card>
 
-            {/* Found Invoice Item Selection */}
             {foundInvoice && (
-              <Card className="border-brand/30">
-                <CardHeader className="border-b border-border pb-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-fg text-sm">{foundInvoice.invoiceNumber}</span>
-                        <Badge variant="success">Posted</Badge>
-                      </div>
-                      <div className="text-xs text-fg-subtle mt-1 flex items-center gap-3">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {formatDate(foundInvoice.invoiceDate)}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <User className="w-3 h-3" />
-                          {foundInvoice.customer?.name || 'Walk-in Retail Customer'}
-                        </span>
-                      </div>
+              <Card>
+                <CardHeader>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="font-mono">{foundInvoice.invoiceNumber}</CardTitle>
+                      <StatusBadge status={foundInvoice.paymentStatus} />
                     </div>
-                    <div className="text-right">
-                      <span className="text-xs text-fg-subtle block">Total Billed</span>
-                      <span className="text-base font-bold text-fg">
-                        {formatCurrency(foundInvoice.totalAmount)}
+                    <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-fg-muted">
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar className="size-4" aria-hidden="true" />
+                        {formatDate(foundInvoice.invoiceDate)}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <User className="size-4" aria-hidden="true" />
+                        {foundInvoice.customer?.name || 'Walk-in customer'}
                       </span>
                     </div>
                   </div>
+                  <div className="text-right">
+                    <p className="text-xs text-fg-muted">Bill total</p>
+                    <p className="text-base font-semibold text-fg tabular-nums">{formatCurrency(foundInvoice.totalAmount)}</p>
+                  </div>
                 </CardHeader>
 
-                <div className="p-4 space-y-4">
-                  <div>
-                    <label className="text-xs font-semibold uppercase tracking-wider text-fg-subtle block mb-2">
-                      Select Items and Quantities to Return
-                    </label>
-                    <div className="divide-y divide-border border border-border rounded-xl overflow-hidden">
+                <div className="space-y-5">
+                  <fieldset>
+                    <legend className="mb-2 text-sm font-medium text-fg">2. Items returned</legend>
+                    <ul className="divide-y divide-border overflow-hidden rounded-card border border-border">
                       {foundInvoice.lines?.map((line: any) => {
-                        const currentReturnQty = returnQtys[line.itemId] || 0;
-                        const maxQty = Number(line.quantity);
-
+                        const qty = returnQtys[line.itemId] || 0;
+                        const maxQty = Math.max(0, Number(line.quantity) - Number(line.returnedQuantity || 0));
                         return (
-                          <div
-                            key={line.id || line.itemId}
-                            className="p-3 bg-surface-2/50 flex items-center justify-between gap-3"
-                          >
-                            <div className="flex-1 min-w-0">
-                              <h5 className="text-xs font-semibold text-fg truncate">{line.itemName}</h5>
-                              <div className="text-[11px] text-fg-subtle mt-0.5">
-                                <span>Unit: {formatCurrency(line.unitPrice)}</span>
-                                <span className="mx-1.5">•</span>
-                                <span>Billed Qty: {maxQty}</span>
-                                <span className="mx-1.5">•</span>
-                                <span className="text-brand">{line.gstRate}% GST</span>
-                              </div>
+                          <li key={line.id || line.itemId} className="flex items-center justify-between gap-3 p-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-fg">{line.itemName}</p>
+                              <p className="text-xs text-fg-muted">
+                                {formatCurrency(line.unitPrice)} · sold {Number(line.quantity)}
+                                {Number(line.returnedQuantity) > 0 && ` · already returned ${Number(line.returnedQuantity)}`} ·{' '}
+                                {line.gstRate}% GST
+                              </p>
                             </div>
-
-                            {/* Qty Controls */}
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-fg-subtle">Return:</span>
-                              <div className="flex items-center gap-1 bg-surface border border-border rounded-lg p-0.5">
-                                <button
-                                  type="button"
-                                  onClick={() => handleQtyChange(line.itemId, maxQty, currentReturnQty - 1)}
-                                  className="p-1 hover:bg-surface-2 text-fg-subtle hover:text-fg rounded"
-                                >
-                                  -
-                                </button>
-                                <NumberInput
-                                  type="number"
-                                  value={currentReturnQty}
-                                  onChange={(e) =>
-                                    handleQtyChange(line.itemId, maxQty, Number(e.target.value))
-                                  }
-                                  className="w-10 text-center bg-transparent text-xs font-bold text-fg focus:outline-none"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleQtyChange(line.itemId, maxQty, currentReturnQty + 1)}
-                                  className="p-1 hover:bg-surface-2 text-fg-subtle hover:text-fg rounded"
-                                >
-                                  +
-                                </button>
-                              </div>
+                            <div className="flex items-center rounded-control border border-border-strong">
+                              <IconButton size="sm" label={`Return one less ${line.itemName}`} onClick={() => handleQtyChange(line.itemId, maxQty, qty - 1)} disabled={qty <= 0}>
+                                <Minus />
+                              </IconButton>
+                              <label htmlFor={`ret-${line.itemId}`} className="sr-only">
+                                Quantity of {line.itemName} to return
+                              </label>
+                              <NumberInput
+                                id={`ret-${line.itemId}`}
+                                value={qty}
+                                min={0}
+                                max={maxQty}
+                                onChange={(e) => handleQtyChange(line.itemId, maxQty, Number(e.target.value))}
+                                className="h-8 w-12 bg-transparent text-center text-sm font-semibold text-fg focus:outline-none"
+                              />
+                              <IconButton size="sm" label={`Return one more ${line.itemName}`} onClick={() => handleQtyChange(line.itemId, maxQty, qty + 1)} disabled={qty >= maxQty}>
+                                <Plus />
+                              </IconButton>
                             </div>
-                          </div>
+                          </li>
                         );
                       })}
-                    </div>
-                  </div>
+                    </ul>
+                  </fieldset>
 
-                  {/* Return Tender & Reason */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                    <div>
-                      <label className="text-xs font-semibold text-fg-muted block mb-1">
-                        Refund Mode
-                      </label>
-                      <select
-                        value={refundMode}
-                        onChange={(e: any) => setRefundMode(e.target.value)}
-                        className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-xs text-fg focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        <option value="CASH">Cash Refund (Counter)</option>
-                        <option value="LEDGER_CREDIT">Customer Ledger Credit (Deduct Udhaar)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-semibold text-fg-muted block mb-1">
-                        Return Reason
-                      </label>
-                      <select
-                        value={returnReason}
-                        onChange={(e) => setReturnReason(e.target.value)}
-                        className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-xs text-fg focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        <option value="Customer Return">Customer Return / Exchange</option>
-                        <option value="Damaged Goods">Damaged / Defective Goods</option>
-                        <option value="Expired Product">Expired Product</option>
-                        <option value="Billing Error">Billing Rate / Quantity Error</option>
-                      </select>
-                    </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Select label="3. Refund as" value={refundMode} onChange={(e) => setRefundMode(e.target.value as any)}>
+                      <option value="CASH">Cash refund from drawer</option>
+                      <option value="LEDGER_CREDIT">Credit to customer's udhaar account</option>
+                    </Select>
+                    <Select label="Reason" value={returnReason} onChange={(e) => setReturnReason(e.target.value)}>
+                      <option value="Customer return">Customer return / exchange</option>
+                      <option value="Damaged goods">Damaged or defective</option>
+                      <option value="Expired product">Expired product</option>
+                      <option value="Billing error">Billing error (rate / quantity)</option>
+                    </Select>
                   </div>
 
                   <Input
-                    label="Return Audit Note (Optional)"
-                    placeholder="e.g. Returned with original seal and box"
+                    label="Note"
+                    hint="Optional — kept on the credit note for audit."
+                    placeholder="e.g. Returned sealed in original box"
                     value={returnNotes}
                     onChange={(e) => setReturnNotes(e.target.value)}
                   />
 
-                  {/* Action Summary */}
-                  <div className="p-3 bg-surface-2 rounded-xl border border-border flex items-center justify-between">
+                  <div className="flex flex-col gap-3 rounded-card border border-border bg-surface-2 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <span className="text-xs text-fg-subtle block">Total Refundable</span>
-                      <span className="text-lg font-bold text-fg">{formatCurrency(estimatedRefund)}</span>
+                      <p className="text-xs text-fg-muted">Estimated refund (incl. GST)</p>
+                      <p className="text-xl font-semibold text-fg tabular-nums">{formatCurrency(estimatedRefund)}</p>
                     </div>
-                    <Button
-                      variant="primary"
-                      size="md"
-                      onClick={handleSubmitReturn}
-                      isLoading={isSubmittingReturn}
-                      disabled={totalItemsToReturn === 0}
-                      className="font-bold shadow-lg shadow-emerald-600/30"
-                    >
-                      <PackageCheck className="w-4 h-4 mr-1.5" />
-                      Restock & Issue Credit Note
+                    <Button onClick={handleSubmitReturn} isLoading={isSubmittingReturn} disabled={totalItemsToReturn === 0}>
+                      <PackageCheck /> Issue credit note
                     </Button>
                   </div>
                 </div>
@@ -368,50 +275,46 @@ export default function ReturnsPage() {
             )}
           </div>
 
-          {/* Right Column: Quick Recent Invoices (5 cols) */}
-          <div className="lg:col-span-5 space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm flex items-center justify-between">
-                  <span>Recent Issued Invoices</span>
-                  <Link to="/invoices" className="text-xs text-brand hover:underline">
-                    View All
-                  </Link>
-                </CardTitle>
-              </CardHeader>
-              <div className="divide-y divide-border max-h-[500px] overflow-y-auto">
-                {isLoadingRecent ? (
-                  <div className="p-6 text-center text-xs text-fg-subtle">Loading recent invoices...</div>
-                ) : recentInvoices.length === 0 ? (
-                  <div className="p-6 text-center text-xs text-fg-subtle">No recent invoices found</div>
-                ) : (
-                  recentInvoices.map((inv) => (
-                    <button
-                      key={inv.id}
-                      type="button"
-                      onClick={() => handleSelectInvoice(inv)}
-                      className="w-full p-3.5 text-left hover:bg-surface-2/50 transition-colors flex items-center justify-between group"
-                    >
-                      <div>
-                        <div className="text-xs font-bold text-fg group-hover:text-brand font-mono">
-                          {inv.invoiceNumber}
-                        </div>
-                        <div className="text-[11px] text-fg-subtle mt-0.5">
-                          {inv.customer?.name || 'Walk-in'} • {formatDate(inv.invoiceDate)}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs font-bold text-fg">
-                          {formatCurrency(inv.totalAmount)}
-                        </div>
-                        <span className="text-[10px] text-brand flex items-center justify-end gap-0.5 mt-0.5">
-                          Select <ArrowRight className="w-3 h-3" />
-                        </span>
-                      </div>
-                    </button>
-                  ))
-                )}
+          <div className="lg:col-span-5">
+            <Card padded={false}>
+              <div className="flex items-center justify-between border-b border-border px-5 py-4">
+                <h2 className="text-base font-semibold text-fg">Recent bills</h2>
+                <Link to="/invoices" className="text-sm font-medium text-accent hover:underline">
+                  All invoices
+                </Link>
               </div>
+              {isLoadingRecent ? (
+                <div className="space-y-3 p-5">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Skeleton key={i} className="h-10 w-full" />
+                  ))}
+                </div>
+              ) : recentInvoices.length === 0 ? (
+                <EmptyState icon={Receipt} title="No bills yet" />
+              ) : (
+                <ul className="max-h-[500px] divide-y divide-border overflow-y-auto">
+                  {recentInvoices.map((inv) => (
+                    <li key={inv.id}>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectInvoice(inv)}
+                        className="flex w-full items-center justify-between gap-3 px-5 py-3 text-left transition-colors hover:bg-surface-2"
+                      >
+                        <span className="min-w-0">
+                          <span className="block font-mono text-sm font-medium text-fg">{inv.invoiceNumber}</span>
+                          <span className="block truncate text-xs text-fg-muted">
+                            {inv.customer?.name || 'Walk-in'} · {formatDate(inv.invoiceDate)}
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-fg tabular-nums">{formatCurrency(inv.totalAmount)}</span>
+                          <ChevronRight className="size-4 text-fg-subtle" aria-hidden="true" />
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </Card>
           </div>
         </div>

@@ -1,22 +1,29 @@
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Skeleton } from './page';
 
-export type StatTone = 'brand' | 'emerald' | 'amber' | 'rose' | 'sky' | 'neutral';
+// `brand`/`emerald`/`amber`/`rose`/`sky` are legacy names mapped onto semantic tones.
+export type StatTone = 'highlight' | 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'brand' | 'emerald' | 'amber' | 'rose' | 'sky';
 
 const toneChip: Record<StatTone, string> = {
-  brand: 'bg-brand/10 text-brand',
-  emerald: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  amber: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  rose: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
-  sky: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
-  neutral: 'bg-surface-2 text-fg-subtle',
+  highlight: 'bg-highlight text-highlight-fg',
+  primary: 'bg-primary-soft text-accent',
+  brand: 'bg-primary-soft text-accent',
+  success: 'bg-success-soft text-success',
+  emerald: 'bg-success-soft text-success',
+  warning: 'bg-warning-soft text-warning',
+  amber: 'bg-warning-soft text-warning',
+  danger: 'bg-danger-soft text-danger',
+  rose: 'bg-danger-soft text-danger',
+  info: 'bg-info-soft text-info',
+  sky: 'bg-info-soft text-info',
+  neutral: 'bg-surface-2 text-fg-muted',
 };
 
 /**
- * Standard KPI / metric card used across every data tab.
- * Values stay neutral (text-fg) for a clean, professional read; meaning is
- * carried by the tinted icon chip and the optional footer — not loud numbers.
+ * KPI card. The number stays neutral (text-fg); meaning is carried by the icon chip
+ * and the footer, never by a loud coloured number.
  */
 export const StatCard: React.FC<{
   label: string;
@@ -25,26 +32,26 @@ export const StatCard: React.FC<{
   tone?: StatTone;
   footerLeft?: React.ReactNode;
   footerRight?: React.ReactNode;
+  isLoading?: boolean;
   className?: string;
-}> = ({ label, value, icon: Icon, tone = 'neutral', footerLeft, footerRight, className }) => (
-  <div
-    className={cn(
-      'bg-surface border border-border rounded-xl p-5 shadow-sm transition-shadow hover:shadow-md',
-      className
-    )}
-  >
-    <div className="flex items-center justify-between gap-3 mb-3">
-      <span className="text-xs font-medium uppercase tracking-wide text-fg-subtle">{label}</span>
+}> = ({ label, value, icon: Icon, tone = 'neutral', footerLeft, footerRight, isLoading, className }) => (
+  <div className={cn('rounded-card border border-border bg-surface p-4 shadow-sm', className)}>
+    <div className="mb-2 flex items-center justify-between gap-3">
+      <span className="text-sm font-medium text-fg-muted">{label}</span>
       {Icon && (
-        <div className={cn('p-2 rounded-lg shrink-0', toneChip[tone])}>
-          <Icon className="w-4 h-4" />
-        </div>
+        <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-control', toneChip[tone])}>
+          <Icon className="size-4" aria-hidden="true" />
+        </span>
       )}
     </div>
-    <div className="text-2xl font-bold text-fg tracking-tight tabular-nums">{value}</div>
+    {isLoading ? (
+      <Skeleton className="h-8 w-32" />
+    ) : (
+      <div className="text-2xl font-semibold tracking-tight text-fg tabular-nums">{value}</div>
+    )}
     {(footerLeft || footerRight) && (
-      <div className="mt-3 pt-3 border-t border-border flex items-center justify-between gap-2 text-[11px] text-fg-subtle">
-        <span className="truncate">{footerLeft}</span>
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3 text-xs text-fg-subtle">
+        <span className="truncate">{isLoading ? <Skeleton className="h-3 w-24" /> : footerLeft}</span>
         {footerRight && <span className="shrink-0">{footerRight}</span>}
       </div>
     )}
