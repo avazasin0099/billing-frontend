@@ -45,8 +45,12 @@ export const Topbar: React.FC = () => {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Initial sync count check
-    SyncManager.getPendingCount().then(setPendingSyncCount);
+    // Initial sync count check, then push any bills queued earlier for this shop
+    // (e.g. before the last logout, or while the network was down).
+    SyncManager.getPendingCount().then((count) => {
+      setPendingSyncCount(count);
+      if (count > 0 && navigator.onLine) SyncManager.triggerSync(api);
+    });
 
     const unsubscribe = SyncManager.subscribe((syncing, count) => {
       setIsSyncing(syncing);
@@ -82,16 +86,42 @@ export const Topbar: React.FC = () => {
 
   const handleManualSync = async () => {
     setIsSyncing(true);
-    await SyncManager.triggerSync(api);
+    const { failed } = await SyncManager.triggerSync(api, { manual: true });
     setIsSyncing(false);
+    if (failed > 0) {
+      alert(`${failed} offline bill(s) were rejected by the server and are still queued. Ask a manager to review them.`);
+    }
   };
 
-  const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('billpro_token');
-      localStorage.removeItem('billpro_refresh_token');
-      localStorage.removeItem('billpro_user');
+  const handleLogout = async () => {
+    if (typeof window === 'undefined') return;
+
+    // Offline bills are kept on this device and tagged with their shop, so they sync the next
+    // time anyone logs into that shop — but warn, because they are not on the server yet.
+    if (navigator.onLine) {
+      await SyncManager.triggerSync(api).catch(() => {});
     }
+    const unsynced = await SyncManager.getTotalPendingCount();
+    if (
+      unsynced > 0 &&
+      !window.confirm(
+        `${unsynced} offline bill(s) have not reached the server yet. They stay saved on this device and will sync on the next login to this shop.\n\nLog out anyway?`
+      )
+    ) {
+      return;
+    }
+
+    // Revoke the refresh token server-side (best effort) so a copied token can't be reused.
+    const refreshToken = localStorage.getItem('billpro_refresh_token');
+    if (refreshToken) {
+      api.post('/auth/logout', { refreshToken }).catch(() => {});
+    }
+
+    localStorage.removeItem('billpro_token');
+    localStorage.removeItem('billpro_refresh_token');
+    localStorage.removeItem('billpro_user');
+    // billpro_shop_id / billpro_shop are intentionally kept: this device is the shop's counter,
+    // and Counter-PIN login needs to know which shop it belongs to.
     navigate('/login');
   };
 

@@ -30,10 +30,11 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, Badge, Input } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
-import { api } from '@/services/api-client';
+import { api, ApiError } from '@/services/api-client';
 import { formatCurrency, cn } from '@/lib/utils';
 import { Item, CartItem, Customer, PaymentMethod } from '@/types';
-import { LocalDbService } from '@/offline/pending-operations';
+import { LocalDbService, newUuid, localIsoDate } from '@/offline/pending-operations';
+import { SyncManager } from '@/offline/sync-manager';
 import { posAudio } from '@/lib/sound';
 import { NumberInput } from '@/components/ui/number-input';
 
@@ -117,6 +118,17 @@ export default function BillingPosPage() {
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Only OWNER / MANAGER may change a line's price (the server enforces this too; offline
+  // cashier overrides are flagged for manager review on sync).
+  const canEditPrice = React.useMemo(() => {
+    try {
+      const role = JSON.parse(localStorage.getItem('billpro_user') || '{}').role;
+      return role === 'OWNER' || role === 'MANAGER';
+    } catch {
+      return false;
+    }
+  }, []);
 
   // Sound toggle
   const toggleSound = () => {
@@ -280,7 +292,7 @@ export default function BillingPosPage() {
       if (existing) {
         return prev.map((ci) =>
           ci.item.id === item.id
-            ? recalculateCartItem(item, ci.quantity + 1, ci.discountAmount, isInterstate)
+            ? recalculateCartItem(item, ci.quantity + 1, ci.discountAmount, isInterstate, ci.unitPrice)
             : ci
         );
       }
@@ -393,9 +405,7 @@ export default function BillingPosPage() {
     setActivePaymentTab('CASH');
     setSplitPayments([{ method: 'CASH', amount: roundedTotal }]);
     // Fresh idempotency key per checkout so retries/double-clicks can't double-post this bill.
-    setCheckoutKey(
-      typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `ck-${Date.now()}`
-    );
+    setCheckoutKey(newUuid());
     setIsPaymentModalOpen(true);
   };
 
@@ -512,10 +522,14 @@ export default function BillingPosPage() {
 
     setIsSubmitting(true);
 
+    // One key per checkout: used for the online POST *and* as the offline queue id, so a bill
+    // whose online request reached the server just before the network dropped is never doubled.
+    const billKey = checkoutKey || newUuid();
+
     const payload = {
       customerId: selectedCustomerId || undefined,
-      invoiceDate: new Date().toISOString().slice(0, 10),
-      idempotencyKey: checkoutKey || undefined,
+      invoiceDate: localIsoDate(),
+      idempotencyKey: billKey,
       items: cart.map((ci) => ({
         itemId: ci.item.id,
         quantity: ci.quantity,
@@ -532,33 +546,56 @@ export default function BillingPosPage() {
         })),
     };
 
+    const saveOffline = async () => {
+      const shopId = localStorage.getItem('billpro_shop_id');
+      if (!shopId) throw new Error('No active shop on this device. Please log in again.');
+      const cust = customers.find((c) => c.id === selectedCustomerId);
+      const offlineRecord = await LocalDbService.saveOfflineInvoice({
+        id: billKey,
+        shopId,
+        invoiceDate: payload.invoiceDate,
+        items: payload.items,
+        payments: payload.payments,
+        totalAmount: roundedTotal,
+        customerId: selectedCustomerId || undefined,
+        customerName: cust?.name,
+      });
+      SyncManager.refreshPendingCount().catch(() => {});
+
+      return {
+        ...offlineRecord,
+        invoiceNumber: `OFFLINE-${offlineRecord.id.slice(-6).toUpperCase()}`,
+        totalAmount: roundedTotal,
+        paidAmount: Math.min(roundedTotal, totalAllocated),
+        balanceAmount: remainingBalance,
+        customer: cust,
+        lines: cart.map((ci) => ({
+          itemName: ci.item.name,
+          quantity: ci.quantity,
+          unitPrice: ci.unitPrice,
+          lineTotal: ci.lineTotal,
+        })),
+      };
+    };
+
     try {
       let createdInvoice: any;
 
-      if (navigator.onLine) {
-        createdInvoice = await api.post('/invoices', payload);
+      if (!navigator.onLine) {
+        createdInvoice = await saveOffline();
       } else {
-        const cust = customers.find((c) => c.id === selectedCustomerId);
-        const offlineRecord = await LocalDbService.saveOfflineInvoice({
-          shopId: localStorage.getItem('billpro_shop_id') || 'shop-1',
-          items: payload.items,
-          payments: payload.payments,
-          totalAmount: roundedTotal,
-          customerId: selectedCustomerId,
-          customerName: cust?.name,
-        });
-
-        createdInvoice = {
-          ...offlineRecord,
-          invoiceNumber: `OFFLINE-${offlineRecord.id.slice(-6)}`,
-          totalAmount: roundedTotal,
-          lines: cart.map((ci) => ({
-            itemName: ci.item.name,
-            quantity: ci.quantity,
-            unitPrice: ci.unitPrice,
-            lineTotal: ci.lineTotal,
-          })),
-        };
+        try {
+          createdInvoice = await api.post('/invoices', payload);
+        } catch (err: any) {
+          // navigator.onLine is true whenever Wi-Fi is up, even with no internet. If the request
+          // never got an answer, queue the bill instead of losing the sale. Validation / stock /
+          // permission errors (4xx) are NOT queued — the cashier must fix those now.
+          if (err instanceof ApiError && err.isNetworkError) {
+            createdInvoice = await saveOffline();
+          } else {
+            throw err;
+          }
+        }
       }
 
       posAudio.playSuccessChime();
@@ -909,7 +946,9 @@ export default function BillingPosPage() {
                   <div className="flex-1 min-w-0">
                     <h5 className="text-xs font-semibold text-fg truncate">{ci.item.name}</h5>
                     <div className="flex items-center gap-2 text-[10px] text-fg-subtle mt-0.5">
-                      {editingPriceId === ci.item.id ? (
+                      {!canEditPrice ? (
+                        <span>{formatCurrency(ci.unitPrice)}</span>
+                      ) : editingPriceId === ci.item.id ? (
                         <span className="inline-flex items-center gap-1">
                           <span className="text-fg-subtle">₹</span>
                           <input

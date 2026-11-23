@@ -17,6 +17,9 @@ export interface PendingInvoice {
 
 export interface SyncQueueEvent {
   id: string;
+  /** Shop the bill belongs to. Events are only ever synced while logged into this shop. */
+  shopId?: string;
+  lastError?: string;
   eventType: string; // 'CREATE_INVOICE'
   entityName: string;
   entityId: string;

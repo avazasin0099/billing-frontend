@@ -8,8 +8,9 @@ import { api } from '@/services/api-client';
 export default function LoginPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'password' | 'pin'>('password');
-  const [identifier, setIdentifier] = useState('admin@billpro.local');
-  const [password, setPassword] = useState('Admin@1234');
+  // Never pre-fill credentials (the demo quick-fill below exists only in dev builds).
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [pin, setPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');

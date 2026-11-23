@@ -1,6 +1,24 @@
 import { getLocalDb, PendingInvoice, SyncQueueEvent } from './local-db';
 import { Item, Customer } from '../types';
 
+/** RFC-4122 v4 UUID (server sync tables use UUID columns). */
+export const newUuid = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  // Fallback for very old browsers / non-secure contexts.
+  const bytes = new Uint8Array(16);
+  (typeof crypto !== 'undefined' ? crypto : (window as any).msCrypto).getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
+
+/** Local calendar date (YYYY-MM-DD) — toISOString() is UTC and gives yesterday before 05:30 IST. */
+export const localIsoDate = (d: Date = new Date()): string => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
 export class LocalDbService {
   // --- Items Cache ---
   public static async cacheItems(items: Item[]): Promise<void> {
@@ -39,7 +57,14 @@ export class LocalDbService {
 
   // --- Pending Invoices & Queue ---
   public static async saveOfflineInvoice(invoiceData: {
+    /**
+     * The checkout's idempotency key. Re-using it as the offline id means that if the online
+     * attempt actually reached the server before the network dropped, the later sync is
+     * de-duplicated server-side instead of posting the bill twice.
+     */
+    id?: string;
     shopId: string;
+    invoiceDate?: string;
     items: any[];
     payments: any[];
     totalAmount: number;
@@ -47,13 +72,13 @@ export class LocalDbService {
     customerName?: string;
   }): Promise<PendingInvoice> {
     const db = await getLocalDb();
-    const id = `off-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const id = invoiceData.id || newUuid();
 
     const pendingInvoice: PendingInvoice = {
       id,
       shopId: invoiceData.shopId,
-      invoiceDate: new Date().toISOString().slice(0, 10),
-      customerId: invoiceData.customerId,
+      invoiceDate: invoiceData.invoiceDate || localIsoDate(),
+      customerId: invoiceData.customerId || undefined,
       customerName: invoiceData.customerName,
       items: invoiceData.items,
       payments: invoiceData.payments,
@@ -64,11 +89,12 @@ export class LocalDbService {
 
     const syncEvent: SyncQueueEvent = {
       id,
+      shopId: invoiceData.shopId,
       eventType: 'CREATE_INVOICE',
       entityName: 'Invoice',
       entityId: id,
       payload: {
-        id,
+        idempotencyKey: id,
         invoiceDate: pendingInvoice.invoiceDate,
         customerId: pendingInvoice.customerId,
         items: pendingInvoice.items,
@@ -91,9 +117,25 @@ export class LocalDbService {
     return await db.getAllFromIndex('pending_invoices', 'by-created');
   }
 
-  public static async getSyncQueue(): Promise<SyncQueueEvent[]> {
+  /**
+   * Queued events, optionally only those belonging to `shopId`. Events saved by older builds
+   * have no shopId on the event, so fall back to the shop recorded on the pending invoice.
+   */
+  public static async getSyncQueue(shopId?: string): Promise<SyncQueueEvent[]> {
     const db = await getLocalDb();
-    return await db.getAll('sync_queue');
+    const events = await db.getAll('sync_queue');
+    if (!shopId) return events;
+
+    const result: SyncQueueEvent[] = [];
+    for (const e of events) {
+      let eventShop = e.shopId;
+      if (!eventShop) {
+        const pending = await db.get('pending_invoices', e.id);
+        eventShop = pending?.shopId;
+      }
+      if (eventShop === shopId) result.push(e);
+    }
+    return result;
   }
 
   public static async markEventSynced(id: string): Promise<void> {
@@ -104,6 +146,7 @@ export class LocalDbService {
     const pending = await tx.objectStore('pending_invoices').get(id);
     if (pending) {
       pending.syncStatus = 'SYNCED';
+      pending.errorMessage = undefined;
       await tx.objectStore('pending_invoices').put(pending);
     }
     await tx.done;
@@ -117,6 +160,7 @@ export class LocalDbService {
     if (event) {
       event.retryCount += 1;
       event.lastAttemptAt = Date.now();
+      event.lastError = errorMessage;
       await tx.objectStore('sync_queue').put(event);
     }
 

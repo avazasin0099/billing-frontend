@@ -22,8 +22,54 @@ const getBaseUrl = (): string => {
   return 'http://localhost:5000/api/v1';
 };
 
+/** Error thrown by the API client. `isNetworkError` = the request never got a usable answer. */
+export class ApiError extends Error {
+  status?: number;
+  isNetworkError: boolean;
+  constructor(message: string, opts: { status?: number; isNetworkError?: boolean } = {}) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = opts.status;
+    this.isNetworkError = !!opts.isNetworkError;
+  }
+}
+
+// Gateway / proxy failures mean the request may not have reached the app — treat like offline.
+const NETWORK_LIKE_STATUSES = new Set([502, 503, 504]);
+
+/** Stable per-browser device id (UUID), sent as X-Device-Id for offline-sync auditing. */
+export const getDeviceId = (): string => {
+  const KEY = 'billpro_device_id';
+  try {
+    let id = localStorage.getItem(KEY);
+    if (!id) {
+      id =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+      localStorage.setItem(KEY, id);
+    }
+    return id;
+  } catch {
+    return 'unknown-device';
+  }
+};
+
+const clearSession = () => {
+  localStorage.removeItem('billpro_token');
+  localStorage.removeItem('billpro_refresh_token');
+  localStorage.removeItem('billpro_user');
+};
+
 class ApiClient {
-  private getHeaders(): HeadersInit {
+  /**
+   * Single in-flight refresh shared by every request that hits a 401 at the same moment.
+   * Refresh tokens are rotated (single-use), so parallel refreshes would revoke each other
+   * and log the user out (the dashboard fires 4 requests at once).
+   */
+  private refreshPromise: Promise<boolean> | null = null;
+
+  private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -37,9 +83,42 @@ class ApiClient {
       if (shopId) {
         headers['X-Shop-Id'] = shopId;
       }
+      headers['X-Device-Id'] = getDeviceId();
     }
 
     return headers;
+  }
+
+  private refreshSession(baseUrl: string): Promise<boolean> {
+    if (this.refreshPromise) return this.refreshPromise;
+
+    this.refreshPromise = (async () => {
+      const refreshToken = localStorage.getItem('billpro_refresh_token');
+      if (!refreshToken) return false;
+      try {
+        const refreshRes = await fetch(`${baseUrl}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+        const refreshData = await refreshRes.json().catch(() => ({}));
+        if (refreshRes.ok && refreshData.success && refreshData.data?.accessToken) {
+          localStorage.setItem('billpro_token', refreshData.data.accessToken);
+          localStorage.setItem('billpro_refresh_token', refreshData.data.refreshToken);
+          return true;
+        }
+        // The server rejected the refresh token: the session is over.
+        clearSession();
+        return false;
+      } catch {
+        // Network failure while refreshing — keep the tokens so the user can retry when back online.
+        return false;
+      }
+    })().finally(() => {
+      this.refreshPromise = null;
+    });
+
+    return this.refreshPromise;
   }
 
   private async request<T = any>(endpoint: string, options: RequestInit = {}, retried = false): Promise<T> {
@@ -50,48 +129,39 @@ class ApiClient {
       ...options,
       headers: {
         ...this.getHeaders(),
-        ...(options.headers || {}),
+        ...((options.headers as Record<string, string>) || {}),
       },
     };
 
+    let response: Response;
     try {
-      const response = await fetch(url, config);
-
-      if (response.status === 401 && typeof window !== 'undefined' && !retried) {
-        // Try refresh token (only once — `retried` prevents an infinite refresh/retry loop
-        // if the server keeps returning 401 after a seemingly successful refresh).
-        const refreshToken = localStorage.getItem('billpro_refresh_token');
-        if (refreshToken && endpoint !== '/auth/refresh' && endpoint !== '/auth/login') {
-          try {
-            const refreshRes = await fetch(`${baseUrl}/auth/refresh`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ refreshToken }),
-            });
-            const refreshData = await refreshRes.json();
-            if (refreshData.success && refreshData.data?.accessToken) {
-              localStorage.setItem('billpro_token', refreshData.data.accessToken);
-              localStorage.setItem('billpro_refresh_token', refreshData.data.refreshToken);
-              // Retry original request exactly once.
-              return this.request<T>(endpoint, options, true);
-            }
-          } catch {
-            localStorage.removeItem('billpro_token');
-            localStorage.removeItem('billpro_refresh_token');
-          }
-        }
-      }
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.message || `Request failed with status ${response.status}`);
-      }
-
-      return data.data !== undefined ? data.data : data;
+      response = await fetch(url, config);
     } catch (err: any) {
-      throw new Error(err.message || 'Network request failed');
+      // fetch only rejects when no HTTP response arrived (offline, DNS, CORS, server down).
+      throw new ApiError('Cannot reach the server. Check your internet connection.', { isNetworkError: true });
     }
+
+    if (response.status === 401 && typeof window !== 'undefined' && !retried) {
+      const isAuthEndpoint = endpoint.startsWith('/auth/');
+      if (!isAuthEndpoint && (await this.refreshSession(baseUrl))) {
+        // Retry the original request exactly once with the new token.
+        return this.request<T>(endpoint, options, true);
+      }
+      if (!isAuthEndpoint && !localStorage.getItem('billpro_token') && window.location.pathname !== '/login') {
+        window.location.assign('/login');
+      }
+    }
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new ApiError(data.message || `Request failed with status ${response.status}`, {
+        status: response.status,
+        isNetworkError: NETWORK_LIKE_STATUSES.has(response.status),
+      });
+    }
+
+    return data.data !== undefined ? data.data : data;
   }
 
   public get<T = any>(endpoint: string, query?: Record<string, any>): Promise<T> {
