@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Search, Eye, RotateCcw, ReceiptIndianRupee as Receipt } from 'lucide-react';
+import { Search, Eye, RotateCcw, ReceiptIndianRupee as Receipt, Printer } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Input, Select } from '@/components/ui/card';
 import { Button, IconButton } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/table';
-import { PageHeader, EmptyState, ErrorState, TableSkeleton, Skeleton } from '@/components/ui/page';
+import { PageHeader, EmptyState, ErrorState, TableSkeleton, Skeleton, Tabs } from '@/components/ui/page';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { toast } from '@/components/ui/toast';
 import { api, asList } from '@/services/api-client';
@@ -13,12 +13,15 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 import { useSession } from '@/lib/session';
 import { Invoice } from '@/types';
 import { NumberInput } from '@/components/ui/number-input';
+import { BillDocument, PrintPortal, type BillFormat } from '@/components/billing/bill-document';
 
 const totalTax = (inv: Partial<Invoice>) =>
   Number(inv.cgstAmount || 0) + Number(inv.sgstAmount || 0) + Number(inv.igstAmount || 0) + Number(inv.cessAmount || 0);
 
 export default function InvoicesPage() {
-  const { isManager } = useSession();
+  const { isManager, shop } = useSession();
+  // Reprint format defaults to the shop's printer setting.
+  const [printFormat, setPrintFormat] = useState<BillFormat>((shop?.settings?.thermalPrinterWidth as BillFormat) || '3inch');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [search, setSearch] = useState('');
   const [paymentStatus, setPaymentStatus] = useState('');
@@ -213,6 +216,23 @@ export default function InvoicesPage() {
         title={`Invoice ${selectedInvoice?.invoiceNumber || ''}`}
         description={selectedInvoice ? `${formatDate(selectedInvoice.invoiceDate)} · ${selectedInvoice.customer?.name || 'Walk-in customer'}` : undefined}
         maxWidth="2xl"
+        footer={
+          <div className="flex w-full flex-wrap items-center justify-between gap-2">
+            <Tabs<BillFormat>
+              label="Print format"
+              value={printFormat}
+              onChange={setPrintFormat}
+              items={[
+                { value: '3inch', label: '80 mm' },
+                { value: '2inch', label: '58 mm' },
+                { value: 'a4', label: 'A4' },
+              ]}
+            />
+            <Button onClick={() => window.print()} disabled={detailLoading || !selectedInvoice?.lines?.length}>
+              <Printer /> Print bill
+            </Button>
+          </div>
+        }
       >
         <div className="space-y-4">
           <div className="flex items-center gap-2">
@@ -300,6 +320,12 @@ export default function InvoicesPage() {
           )}
         </div>
       </Modal>
+
+      {isDetailModalOpen && selectedInvoice && !detailLoading && (
+        <PrintPortal format={printFormat}>
+          <BillDocument invoice={selectedInvoice} shop={shop} format={printFormat} forPrint />
+        </PrintPortal>
+      )}
 
       {/* Sales return */}
       <Modal
