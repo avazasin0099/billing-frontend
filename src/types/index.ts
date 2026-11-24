@@ -80,6 +80,8 @@ export interface CartItem {
   cessAmount: number;
   totalTaxAmount: number;
   lineTotal: number;
+  /** Free-text line detail printed on the bill: model no., IMEI, serial no., warranty… */
+  note?: string;
 }
 
 export interface Customer {
@@ -135,6 +137,9 @@ export interface InvoiceLine {
   igstAmount: number;
   cessAmount: number;
   lineTotal: number;
+  returnedQuantity?: number;
+  /** Line detail entered at the POS (model no., IMEI, serial no., …). */
+  description?: string | null;
 }
 
 export interface InvoiceTaxSummary {

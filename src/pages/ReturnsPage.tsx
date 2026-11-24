@@ -209,6 +209,7 @@ export default function ReturnsPage() {
                           <li key={line.id || line.itemId} className="flex items-center justify-between gap-3 p-3">
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-medium text-fg">{line.itemName}</p>
+                              {line.description && <p className="whitespace-pre-line break-words text-xs text-fg-muted">{line.description}</p>}
                               <p className="text-xs text-fg-muted">
                                 {formatCurrency(line.unitPrice)} · sold {Number(line.quantity)}
                                 {Number(line.returnedQuantity) > 0 && ` · already returned ${Number(line.returnedQuantity)}`} ·{' '}

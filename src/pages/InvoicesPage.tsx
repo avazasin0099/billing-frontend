@@ -246,7 +246,12 @@ export default function InvoicesPage() {
                 {selectedInvoice?.lines?.length ? (
                   selectedInvoice.lines.map((line) => (
                     <Tr key={line.id}>
-                      <Td className="font-medium text-fg">{line.itemName}</Td>
+                      <Td>
+                        <span className="block font-medium text-fg">{line.itemName}</span>
+                        {line.description && (
+                          <span className="block whitespace-pre-line break-words text-xs text-fg-muted">{line.description}</span>
+                        )}
+                      </Td>
                       <Td className="font-mono text-xs">{line.hsnCode || '—'}</Td>
                       <Td numeric>{Number(line.quantity)}</Td>
                       <Td numeric>{formatCurrency(line.unitPrice)}</Td>

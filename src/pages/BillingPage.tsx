@@ -23,6 +23,7 @@ import {
   Banknote,
   Smartphone,
   BookUser,
+  NotebookPen,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -277,7 +278,7 @@ export default function BillingPosPage() {
   // Re-split existing cart lines when the intra/inter-state status flips (e.g. customer changed).
   useEffect(() => {
     setCart((prev) =>
-      prev.map((ci) => recalculateCartItem(ci.item, ci.quantity, ci.discountAmount, isInterstate, ci.unitPrice))
+      prev.map((ci) => ({ ...recalculateCartItem(ci.item, ci.quantity, ci.discountAmount, isInterstate, ci.unitPrice), note: ci.note }))
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isInterstate]);
@@ -290,7 +291,7 @@ export default function BillingPosPage() {
       if (existing) {
         return prev.map((ci) =>
           ci.item.id === item.id
-            ? recalculateCartItem(item, ci.quantity + 1, ci.discountAmount, isInterstate, ci.unitPrice)
+            ? { ...recalculateCartItem(item, ci.quantity + 1, ci.discountAmount, isInterstate, ci.unitPrice), note: ci.note }
             : ci
         );
       }
@@ -305,7 +306,7 @@ export default function BillingPosPage() {
     }
     setCart((prev) =>
       prev.map((ci) =>
-        ci.item.id === itemId ? recalculateCartItem(ci.item, newQty, ci.discountAmount, isInterstate, ci.unitPrice) : ci
+        ci.item.id === itemId ? { ...recalculateCartItem(ci.item, newQty, ci.discountAmount, isInterstate, ci.unitPrice), note: ci.note } : ci
       )
     );
   };
@@ -313,7 +314,7 @@ export default function BillingPosPage() {
   const updateDiscount = (itemId: string, discount: number) => {
     setCart((prev) =>
       prev.map((ci) =>
-        ci.item.id === itemId ? recalculateCartItem(ci.item, ci.quantity, discount, isInterstate, ci.unitPrice) : ci
+        ci.item.id === itemId ? { ...recalculateCartItem(ci.item, ci.quantity, discount, isInterstate, ci.unitPrice), note: ci.note } : ci
       )
     );
   };
@@ -324,10 +325,24 @@ export default function BillingPosPage() {
     setCart((prev) =>
       prev.map((ci) =>
         ci.item.id === itemId
-          ? recalculateCartItem(ci.item, ci.quantity, ci.discountAmount, isInterstate, newPrice)
+          ? { ...recalculateCartItem(ci.item, ci.quantity, ci.discountAmount, isInterstate, newPrice), note: ci.note }
           : ci
       )
     );
+  };
+
+  // Per-line bill detail (model no., IMEI, serial no., warranty…). Printed under the item on the bill.
+  const [noteEditingId, setNoteEditingId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
+  const beginEditNote = (ci: CartItem) => {
+    setNoteEditingId(ci.item.id);
+    setNoteDraft(ci.note || '');
+  };
+  const commitNote = (itemId: string) => {
+    const value = noteDraft.trim().slice(0, 500);
+    setCart((prev) => prev.map((ci) => (ci.item.id === itemId ? { ...ci, note: value || undefined } : ci)));
+    setNoteEditingId(null);
+    setNoteDraft('');
   };
 
   // Open the inline price editor for a line, seeding the draft with the current unit price.
@@ -531,6 +546,7 @@ export default function BillingPosPage() {
         quantity: ci.quantity,
         unitPrice: ci.unitPrice,
         discountAmount: ci.discountAmount,
+        description: ci.note?.trim() || undefined,
       })),
       payments: splitPayments
         // Drop CREDIT and zero tenders — the unpaid remainder is booked to the customer ledger server-side.
@@ -568,6 +584,9 @@ export default function BillingPosPage() {
         customer: cust,
         lines: cart.map((ci) => ({
           itemName: ci.item.name,
+          description: ci.note,
+          hsnCode: ci.item.hsnCode,
+          gstRate: ci.gstRate,
           quantity: ci.quantity,
           unitPrice: ci.unitPrice,
           lineTotal: ci.lineTotal,
@@ -855,7 +874,8 @@ export default function BillingPosPage() {
             ) : (
               <ul className="divide-y divide-border">
                 {cart.map((ci) => (
-                  <li key={ci.item.id} className="flex items-center gap-3 px-4 py-3">
+                  <li key={ci.item.id} className="px-4 py-3">
+                    <div className="flex items-center gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="line-clamp-2 text-sm font-medium text-fg">{ci.item.name}</p>
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-fg-subtle">
@@ -928,6 +948,75 @@ export default function BillingPosPage() {
                     <IconButton size="sm" variant="danger-ghost" label={`Remove ${ci.item.name}`} onClick={() => removeFromCart(ci.item.id)}>
                       <X />
                     </IconButton>
+                    </div>
+
+                    {/* Line details printed on the bill: IMEI, model no., serial no., warranty… */}
+                    {noteEditingId === ci.item.id ? (
+                      <div className="mt-2">
+                        <label htmlFor={`note-${ci.item.id}`} className="sr-only">
+                          Details for {ci.item.name}
+                        </label>
+                        <textarea
+                          id={`note-${ci.item.id}`}
+                          autoFocus
+                          rows={2}
+                          maxLength={500}
+                          value={noteDraft}
+                          onChange={(e) => setNoteDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              commitNote(ci.item.id);
+                            }
+                            if (e.key === 'Escape') {
+                              e.stopPropagation();
+                              setNoteEditingId(null);
+                              setNoteDraft('');
+                            }
+                          }}
+                          placeholder="IMEI, model no., serial no., warranty…"
+                          className={cn(controlClass, 'border-border-strong px-3 py-2')}
+                        />
+                        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-xs text-fg-subtle">Printed on the bill · Shift + Enter for a new line</span>
+                          <div className="flex gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setNoteEditingId(null);
+                                setNoteDraft('');
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button size="sm" onClick={() => commitNote(ci.item.id)}>
+                              Save
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : ci.note ? (
+                      <button
+                        type="button"
+                        onClick={() => beginEditNote(ci)}
+                        title="Edit details"
+                        className="mt-2 flex w-full items-start gap-2 rounded-control border border-dashed border-border-strong bg-surface-2/60 px-2.5 py-1.5 text-left text-xs text-fg-muted transition-colors hover:border-primary"
+                      >
+                        <NotebookPen className="mt-0.5 size-3.5 shrink-0 text-accent" aria-hidden="true" />
+                        <span className="min-w-0 whitespace-pre-line break-words">{ci.note}</span>
+                        <span className="sr-only">(edit details)</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => beginEditNote(ci)}
+                        className="mt-1.5 inline-flex items-center gap-1.5 rounded text-xs font-medium text-accent hover:underline"
+                      >
+                        <NotebookPen className="size-3.5" aria-hidden="true" />
+                        Add details (IMEI, model, serial no.)
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -1203,6 +1292,7 @@ export default function BillingPosPage() {
                     {lines.map((line, idx) => (
                       <div key={idx}>
                         <div className="truncate">{line.itemName}</div>
+                        {line.description && <div className="whitespace-pre-line break-words pl-2">{line.description}</div>}
                         <div className="flex justify-between">
                           <span>
                             {Number(line.quantity)} × {formatCurrency(line.unitPrice)}
@@ -1293,7 +1383,10 @@ export default function BillingPosPage() {
                         {lines.map((line, idx) => (
                           <tr key={idx} className="border-b border-black/20">
                             <td className="px-2 py-1.5">{idx + 1}</td>
-                            <td className="px-2 py-1.5">{line.itemName}</td>
+                            <td className="px-2 py-1.5">
+                              <div>{line.itemName}</div>
+                              {line.description && <div className="whitespace-pre-line break-words text-black/70">{line.description}</div>}
+                            </td>
                             <td className="px-2 py-1.5">{line.hsnCode || '—'}</td>
                             <td className="px-2 py-1.5 text-right">{Number(line.quantity)}</td>
                             <td className="px-2 py-1.5 text-right">{formatCurrency(line.unitPrice)}</td>
